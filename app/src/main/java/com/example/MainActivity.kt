@@ -168,10 +168,10 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
         "hi" -> "होम"
         else -> "Home"
     }
-    val recordLabel = when (uiState.language) {
-        "ur" -> "ریکارڈ"
-        "hi" -> "रिकॉर्ड"
-        else -> "Record"
+    val taqwaLabel = when (uiState.language) {
+        "ur" -> "تقویٰ"
+        "hi" -> "तक़वा"
+        else -> "Taqwa"
     }
     val ramazanLabel = when (uiState.language) {
         "ur" -> "رمضان"
@@ -194,18 +194,17 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                 Row(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .navigationBarsPadding()
-                        .padding(horizontal = 20.dp, vertical = 8.dp),
+                        .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 4.dp),
                     horizontalArrangement = Arrangement.SpaceAround,
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Left: Record Button (Circle shape)
+                    // Left: Taqwa Button (Circle shape)
                     NavCircleItem(
                         selected = selectedTab == "record",
                         onClick = { selectedTab = "record" },
                         icon = if (selectedTab == "record") Icons.Filled.DateRange else Icons.Outlined.DateRange,
-                        label = recordLabel,
-                        testTag = "nav_record_button"
+                        label = taqwaLabel,
+                        testTag = "nav_taqwa_button"
                     )
 
                     // Center: Home Button (Circle shape)
@@ -536,16 +535,16 @@ fun ClockDisplay(
                     val monthNameEn = when (hMonth) {
                         1 -> "Muharram"
                         2 -> "Safar"
-                        3 -> "Rabi' al-Awwal"
-                        4 -> "Rabi' ath-Thani"
-                        5 -> "Jumada al-Ula"
-                        6 -> "Jumada al-Akhirah"
+                        3 -> "Rabi-ul-Awwal"
+                        4 -> "Rabi-us-Sani"
+                        5 -> "Jamadi-ul-Awwal"
+                        6 -> "Jamadi-us-Sani"
                         7 -> "Rajab"
-                        8 -> "Sha'ban"
+                        8 -> "Shaban"
                         9 -> "Ramadan"
-                        10 -> "Shawwal"
-                        11 -> "Dhu al-Qadah"
-                        12 -> "Dhu al-Hijjah"
+                        10 -> "Shawaal"
+                        11 -> "Zul-Qadah"
+                        12 -> "Zul-Hijjah"
                         else -> ""
                     }
                     "Islamic Date: $hDay $monthNameEn $hYear AH"

@@ -42,7 +42,7 @@ data class AppStrings(
     val eidAdhaDay: String = "Sunday",
 
     // Tracker Board Summary & Stats
-    val boardTitle: String = "365 DAY'S BOARD RECORD",
+    val boardTitle: String = "365 DAY'S TAQWA",
     val points: String = "Taqwa Points",
     val ptsUnit: String = "pts",
     val ptsPerPrayerSubtitle: String = "1 pt per prayer",
@@ -275,7 +275,7 @@ val HindiStrings = AppStrings(
     eidAdhaDay = "रविवार",
 
     // Tracker Board Summary & Stats
-    boardTitle = "365-दिन बोर्ड रिकॉर्ड",
+    boardTitle = "365-दिन तक़वा",
     points = "तक़वा पॉइंट्स",
     ptsUnit = "अंक",
     ptsPerPrayerSubtitle = "प्रति नमाज़ 1 अंक",
@@ -446,7 +446,7 @@ val UrduStrings = AppStrings(
     eidAdhaDay = "اتوار",
 
     // Tracker Board Summary & Stats
-    boardTitle = "365 روزہ بورڈ ریکارڈ",
+    boardTitle = "365 روزہ تقویٰ",
     points = "تقوی پوائنٹس",
     ptsUnit = "پوائنٹس",
     ptsPerPrayerSubtitle = "فی نماز 1 پوائنٹ",

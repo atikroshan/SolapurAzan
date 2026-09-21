@@ -1088,7 +1088,7 @@ fun MonthPointHistoryCalendar(
                         }
                     }
 
-                    // Legend indicators with color guidance: 0 Red, 1 Orange, 2 Pink, 3 Mor Pankh, 4 Green, 5 Golden
+                    // Legend indicators with color guidance: 0 Red, 1 Orange, 2-5 Light Green to WhatsApp Green, 6 Golden
                     Row(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -1106,20 +1106,24 @@ fun MonthPointHistoryCalendar(
                             Text("1", fontSize = 8.5.sp, color = Color(0xFFFF9800), fontWeight = FontWeight.Bold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Box(modifier = Modifier.size(7.dp).background(Color(0xFFE91E63), CircleShape))
-                            Text("2", fontSize = 8.5.sp, color = Color(0xFFE91E63), fontWeight = FontWeight.Bold)
+                            Box(modifier = Modifier.size(7.dp).background(Color(0xFF81C784), CircleShape))
+                            Text("2", fontSize = 8.5.sp, color = Color(0xFF81C784), fontWeight = FontWeight.Bold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
-                            Box(modifier = Modifier.size(7.dp).background(Color(0xFF008080), CircleShape))
-                            Text("3", fontSize = 8.5.sp, color = Color(0xFF008080), fontWeight = FontWeight.Bold)
+                            Box(modifier = Modifier.size(7.dp).background(Color(0xFF4CAF50), CircleShape))
+                            Text("3", fontSize = 8.5.sp, color = Color(0xFF4CAF50), fontWeight = FontWeight.Bold)
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
+                            Box(modifier = Modifier.size(7.dp).background(Color(0xFF388E3C), CircleShape))
+                            Text("4", fontSize = 8.5.sp, color = Color(0xFF388E3C), fontWeight = FontWeight.Bold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             Box(modifier = Modifier.size(7.dp).background(Color(0xFF25D366), CircleShape))
-                            Text("4", fontSize = 8.5.sp, color = Color(0xFF25D366), fontWeight = FontWeight.Bold)
+                            Text("5", fontSize = 8.5.sp, color = Color(0xFF25D366), fontWeight = FontWeight.Bold)
                         }
                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                             Box(modifier = Modifier.size(7.dp).background(Color(0xFFFFD700), CircleShape))
-                            Text("5", fontSize = 8.5.sp, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
+                            Text("6", fontSize = 8.5.sp, color = Color(0xFFFFD700), fontWeight = FontWeight.Bold)
                         }
                     }
 
@@ -1172,22 +1176,24 @@ fun MonthPointHistoryCalendar(
                                         val log = uiState.allLogs.find { it.month == displayMonth && it.day == dayNumber }
                                         val points = log?.getCompletedPrayersCount() ?: 0
 
-                                        // Point color as per prayers offered: 0 Red, 1 Orange, 2 Pink, 3 Mor Pankh, 4 Green, 5 Golden
+                                        // Point color as per prayers offered: 0 Red, 1 Orange, 2 to 5 Light Green to WhatsApp Green, 6 Golden
                                         val pointColor = when {
                                             isFutureDay -> TextMuted.copy(alpha = 0.3f)
                                             points == 0 -> Color(0xFFE53935) // 0 Red
                                             points == 1 -> Color(0xFFFF9800) // 1 Orange
-                                            points == 2 -> Color(0xFFE91E63) // 2 Pink
-                                            points == 3 -> Color(0xFF008080) // 3 Mor pankh
-                                            points == 4 -> Color(0xFF25D366) // 4 Green
-                                            else -> Color(0xFFFFD700) // 5 prayer (and above) Golden
+                                            points == 2 -> Color(0xFF81C784) // 2 Light Green
+                                            points == 3 -> Color(0xFF4CAF50) // 3 Medium Green
+                                            points == 4 -> Color(0xFF388E3C) // 4 Dark Green
+                                            points == 5 -> Color(0xFF25D366) // 5 WhatsApp Green
+                                            else -> Color(0xFFFFD700) // 6 Golden
                                         }
 
                                         val cellBg = when {
                                             isToday -> Color(0xFFEAB308).copy(alpha = 0.20f)
                                             isYesterday -> Color(0xFF25D366).copy(alpha = 0.18f)
-                                            points >= 5 -> Color(0xFFFFD700).copy(alpha = 0.14f)
-                                            points > 0 -> Color(0xFF131A29)
+                                            points >= 6 -> Color(0xFFFFD700).copy(alpha = 0.16f)
+                                            points in 2..5 -> Color(0xFF25D366).copy(alpha = 0.10f)
+                                            points == 1 -> Color(0xFFFF9800).copy(alpha = 0.10f)
                                             !isFutureDay -> Color(0xFF1A0F14).copy(alpha = 0.5f)
                                             else -> Color(0xFF090D15).copy(alpha = 0.6f)
                                         }
@@ -1195,8 +1201,9 @@ fun MonthPointHistoryCalendar(
                                         val cellBorder = when {
                                             isToday -> Color(0xFFEAB308)
                                             isYesterday -> Color(0xFF25D366)
-                                            points >= 5 -> Color(0xFFFFD700).copy(alpha = 0.7f)
-                                            points > 0 -> Color(0xFF2B3954)
+                                            points >= 6 -> Color(0xFFFFD700).copy(alpha = 0.7f)
+                                            points in 2..5 -> Color(0xFF25D366).copy(alpha = 0.4f)
+                                            points == 1 -> Color(0xFFFF9800).copy(alpha = 0.4f)
                                             !isFutureDay && points == 0 -> Color(0xFFE53935).copy(alpha = 0.35f)
                                             else -> Color(0xFF161E2D).copy(alpha = 0.4f)
                                         }
