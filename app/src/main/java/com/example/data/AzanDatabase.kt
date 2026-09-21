@@ -1,0 +1,41 @@
+package com.example.data
+
+import android.content.Context
+import androidx.room.Database
+import androidx.room.Room
+import androidx.room.RoomDatabase
+
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
+
+@Database(entities = [AzanTiming::class, PrayerLog::class], version = 3, exportSchema = false)
+abstract class AzanDatabase : RoomDatabase() {
+    abstract fun azanDao(): AzanDao
+    abstract fun prayerLogDao(): PrayerLogDao
+
+    companion object {
+        @Volatile
+        private var INSTANCE: AzanDatabase? = null
+
+        private val MIGRATION_2_3 = object : Migration(2, 3) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE prayer_logs ADD COLUMN tahajjudPrayed INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        fun getDatabase(context: Context): AzanDatabase {
+            return INSTANCE ?: synchronized(this) {
+                val instance = Room.databaseBuilder(
+                    context.applicationContext,
+                    AzanDatabase::class.java,
+                    "azan_database"
+                )
+                .addMigrations(MIGRATION_2_3)
+                .fallbackToDestructiveMigration()
+                .build()
+                INSTANCE = instance
+                instance
+            }
+        }
+    }
+}
