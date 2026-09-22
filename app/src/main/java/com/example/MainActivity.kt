@@ -236,11 +236,11 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                 .padding(innerPadding)
         ) {
             Image(
-                painter = painterResource(id = R.drawable.kaaba_overlay_1780650663524),
+                painter = painterResource(id = R.drawable.img_ramadan_lantern_bg_1790099615091),
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                alpha = 0.01f
+                alpha = 0.005f
             )
 
             AnimatedContent(
