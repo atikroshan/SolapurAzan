@@ -240,7 +240,7 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                alpha = 0.08f
+                alpha = 0.05f
             )
 
             AnimatedContent(
@@ -1376,18 +1376,6 @@ fun Modifier.appBackground(): Modifier {
                     Color(0xFF070B12),
                     Color(0xFF030509)
                 )
-            )
-        )
-        // Soft glowing background aura
-        .background(
-            brush = Brush.radialGradient(
-                colors = listOf(
-                    primaryColor.copy(alpha = 0.22f),
-                    primaryColor.copy(alpha = 0.08f),
-                    Color.Transparent
-                ),
-                center = Offset(500f, 320f),
-                radius = 1100f
             )
         )
         .islamicStarBackground(primaryColor)
