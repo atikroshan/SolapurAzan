@@ -219,8 +219,7 @@ fun TrackerBoardContent(
     CompositionLocalProvider(com.example.ui.theme.LocalAppStrings provides curStrings) {
         Surface(
             modifier = modifier
-                .fillMaxSize()
-                .appBackground(),
+                .fillMaxSize(),
             color = Color.Transparent
         ) {
             Column(
@@ -2656,8 +2655,7 @@ fun RamazanScreenContent(
     CompositionLocalProvider(com.example.ui.theme.LocalAppStrings provides curStrings) {
         Surface(
             modifier = modifier
-                .fillMaxSize()
-                .appBackground(),
+                .fillMaxSize(),
             color = Color.Transparent
         ) {
             Column(
