@@ -128,6 +128,7 @@ class AzanViewModel(
                             set(Calendar.MINUTE, parts[1].toIntOrNull() ?: 0)
                             set(Calendar.SECOND, 0)
                             set(Calendar.MILLISECOND, 0)
+                            add(Calendar.MINUTE, 20) // Only allow marking 20 min after Azan time
                         }
                         if (todayCal.before(prayerCal)) {
                             // Prayer time yet to arrive

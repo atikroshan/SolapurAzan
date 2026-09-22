@@ -87,7 +87,7 @@ data class AppStrings(
     val todaySimple: String = "Today",
 
     // Toast Messages
-    val prayerTimeNotArrivedToast: String = "%s time is at %s. You can only mark after prayer time.",
+    val prayerTimeNotArrivedToast: String = "%s time is at %s. You can only mark 20 minutes after Azan time.",
     val prayerTimeNotStartedToast: String = "%s prayer time has not started yet.",
 
     // Zakat Calculator
@@ -320,7 +320,7 @@ val HindiStrings = AppStrings(
     todaySimple = "आज",
 
     // Toast Messages
-    prayerTimeNotArrivedToast = "%s का समय %s पर है। आप नमाज़ के समय के बाद ही मार्क कर सकते हैं।",
+    prayerTimeNotArrivedToast = "%s का समय %s पर है। आप अज़ान के 20 मिनट बाद ही मार्क कर सकते हैं।",
     prayerTimeNotStartedToast = "%s की नमाज़ का समय अभी शुरू नहीं हुआ है।",
 
     // Zakat Calculator
@@ -491,7 +491,7 @@ val UrduStrings = AppStrings(
     todaySimple = "آج",
 
     // Toast Messages
-    prayerTimeNotArrivedToast = "%s کا وقت %s پر ہے۔ آپ نماز کے وقت کے بعد ہی نشان لگا سکتے ہیں۔",
+    prayerTimeNotArrivedToast = "%s کا وقت %s پر ہے۔ آپ اذان کے 20 منٹ بعد ہی نشان لگا سکتے ہیں۔",
     prayerTimeNotStartedToast = "%s کی نماز کا وقت ابھی شروع نہیں ہوا ہے۔",
 
     // Zakat Calculator

@@ -220,14 +220,13 @@ fun TrackerBoardContent(
         Surface(
             modifier = modifier
                 .fillMaxSize()
-                .appBackground()
-                .statusBarsPadding(),
+                .appBackground(),
             color = Color.Transparent
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // Sticky Header & Language Toggle (Always visible at the top while scrolling)
@@ -1492,6 +1491,8 @@ fun isPrayerTimeArrived(
         set(Calendar.MINUTE, minute)
         set(Calendar.SECOND, 0)
         set(Calendar.MILLISECOND, 0)
+        // Selection / tick allowed 20 minutes after Azan time
+        add(Calendar.MINUTE, 20)
     }
 
     return !now.before(prayerCal)
@@ -2656,14 +2657,13 @@ fun RamazanScreenContent(
         Surface(
             modifier = modifier
                 .fillMaxSize()
-                .appBackground()
-                .statusBarsPadding(),
+                .appBackground(),
             color = Color.Transparent
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.SpaceBetween
             ) {
                 // Sticky Header & Language Toggle (Always visible at the top while scrolling)

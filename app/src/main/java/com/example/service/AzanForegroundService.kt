@@ -4,6 +4,7 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.Context
 import android.content.Intent
 import android.media.AudioAttributes
 import android.media.MediaPlayer
@@ -20,16 +21,68 @@ class AzanForegroundService : Service() {
 
     companion object {
         val isPlayingAzan = MutableStateFlow(false)
+        val currentPlayingPrayerName = MutableStateFlow<String?>(null)
+        val lastAudioFinishedTime = MutableStateFlow(0L)
+        val lastAudioPrayerIndex = MutableStateFlow(-1)
+
+        fun prayerNameToIndex(name: String?): Int {
+            return when (name?.lowercase()?.trim()) {
+                "fajr" -> 0
+                "dhuhr" -> 1
+                "jumah", "juma" -> 1
+                "asr" -> 2
+                "maghrib" -> 3
+                "isha" -> 4
+                "tahajjud" -> 5
+                else -> -1
+            }
+        }
+
+        fun initFromPrefs(context: Context) {
+            try {
+                val prefs = context.getSharedPreferences("azan_prefs", Context.MODE_PRIVATE)
+                val savedTime = prefs.getLong("last_audio_finished_time", 0L)
+                val savedIdx = prefs.getInt("last_audio_prayer_index", -1)
+                if (savedTime > lastAudioFinishedTime.value) {
+                    lastAudioFinishedTime.value = savedTime
+                    lastAudioPrayerIndex.value = savedIdx
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+
+        fun recordAudioFinished(context: Context, timeMs: Long, index: Int) {
+            lastAudioFinishedTime.value = timeMs
+            try {
+                val prefs = context.getSharedPreferences("azan_prefs", Context.MODE_PRIVATE)
+                prefs.edit()
+                    .putLong("last_audio_finished_time", timeMs)
+                    .putInt("last_audio_prayer_index", index)
+                    .apply()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        initFromPrefs(this)
+        val azanName = intent?.getStringExtra("AZAN_NAME") ?: "Azan"
+        val pIdx = prayerNameToIndex(azanName)
+        if (pIdx != -1) {
+            lastAudioPrayerIndex.value = pIdx
+        }
+
         if (intent?.action == "STOP_AZAN") {
             isPlayingAzan.value = false
+            currentPlayingPrayerName.value = null
+            recordAudioFinished(this, System.currentTimeMillis(), lastAudioPrayerIndex.value)
             stopSelf()
             return START_NOT_STICKY
         }
 
-        val azanName = intent?.getStringExtra("AZAN_NAME") ?: "Azan"
+        currentPlayingPrayerName.value = azanName
         
         createNotificationChannel()
         
@@ -96,11 +149,15 @@ class AzanForegroundService : Service() {
 
                 player.setOnCompletionListener {
                     isPlayingAzan.value = false
+                    currentPlayingPrayerName.value = null
+                    recordAudioFinished(this@AzanForegroundService, System.currentTimeMillis(), lastAudioPrayerIndex.value)
                     stopSelf()
                 }
 
                 player.setOnErrorListener { _, _, _ ->
                     isPlayingAzan.value = false
+                    currentPlayingPrayerName.value = null
+                    recordAudioFinished(this@AzanForegroundService, System.currentTimeMillis(), lastAudioPrayerIndex.value)
                     stopSelf()
                     true
                 }
@@ -110,10 +167,14 @@ class AzanForegroundService : Service() {
                 } catch (e: Exception) {
                     e.printStackTrace()
                     isPlayingAzan.value = false
+                    currentPlayingPrayerName.value = null
+                    recordAudioFinished(this@AzanForegroundService, System.currentTimeMillis(), lastAudioPrayerIndex.value)
                     stopSelf()
                 }
             } ?: run {
                 isPlayingAzan.value = false
+                currentPlayingPrayerName.value = null
+                recordAudioFinished(this, System.currentTimeMillis(), lastAudioPrayerIndex.value)
                 stopSelf()
             }
         }
@@ -121,7 +182,11 @@ class AzanForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (isPlayingAzan.value) {
+            recordAudioFinished(this, System.currentTimeMillis(), lastAudioPrayerIndex.value)
+        }
         isPlayingAzan.value = false
+        currentPlayingPrayerName.value = null
         try {
             if (mediaPlayer?.isPlaying == true) {
                 mediaPlayer?.stop()

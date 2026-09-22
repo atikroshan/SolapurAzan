@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
         
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
         
+        com.example.service.AzanForegroundService.initFromPrefs(this)
         com.example.worker.PrayerWorkScheduler.scheduleDailySync(applicationContext)
         
         val isAlarm = intent.getBooleanExtra("FROM_ALARM", false)
@@ -239,7 +240,7 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                 contentDescription = null,
                 modifier = Modifier.fillMaxSize(),
                 contentScale = ContentScale.Crop,
-                alpha = 0.05f
+                alpha = 0.15f
             )
 
             AnimatedContent(
@@ -289,7 +290,6 @@ fun AzanHomeContent(
     Column(
         modifier = modifier
             .fillMaxSize()
-            .statusBarsPadding()
             .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.SpaceBetween
     ) {
@@ -562,7 +562,7 @@ fun ClockDisplay(
         Column(
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.Center,
-            modifier = Modifier.padding(top = 4.dp, bottom = 4.dp)
+            modifier = Modifier.padding(top = 0.dp, bottom = 4.dp)
         ) {
             Row(
                 verticalAlignment = Alignment.Bottom,
@@ -704,18 +704,30 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
     
     // Determine next azan based on time (highlighted accordion stays open)
     val initialNextIndex = remember(uiState.todayTimings) {
-        val timings = uiState.todayTimings
-        if (timings != null) {
-            val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
-            val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-            val prayerSlots = listOf(timings.fajr, timings.dhuhr, timings.asr, timings.maghrib, timings.isha)
-            val minutesSlots = prayerSlots.map { 
-                val p = it.split(":")
-                if (p.size == 2) p[0].toInt() * 60 + p[1].toInt() else 0
-            }
-            val idx = minutesSlots.indexOfFirst { it > currentMinutes }
-            if (idx != -1) idx else 0
-        } else 0
+        val nowMs = System.currentTimeMillis()
+        val isAudioPlaying = com.example.service.AzanForegroundService.isPlayingAzan.value
+        val lastFinishedTime = com.example.service.AzanForegroundService.lastAudioFinishedTime.value
+        val lastAudioIdx = com.example.service.AzanForegroundService.lastAudioPrayerIndex.value
+        val fifteenMinMs = 15 * 60 * 1000L
+
+        if (isAudioPlaying && lastAudioIdx in 0..5) {
+            lastAudioIdx
+        } else if (lastAudioIdx in 0..5 && lastFinishedTime > 0L && (nowMs - lastFinishedTime) < fifteenMinMs) {
+            lastAudioIdx
+        } else {
+            val timings = uiState.todayTimings
+            if (timings != null) {
+                val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
+                val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+                val prayerSlots = listOf(timings.fajr, timings.dhuhr, timings.asr, timings.maghrib, timings.isha)
+                val minutesSlots = prayerSlots.map { 
+                    val p = it.split(":")
+                    if (p.size == 2) p[0].toInt() * 60 + p[1].toInt() else 0
+                }
+                val idx = minutesSlots.indexOfFirst { it > currentMinutes }
+                if (idx != -1) idx else 0
+            } else 0
+        }
     }
     var currentNextIndex by remember { mutableIntStateOf(initialNextIndex) }
     var lastTriggeredMinute by remember { mutableStateOf("") }
@@ -739,7 +751,23 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
                 }
                 
                 val idx = minutesSlots.indexOfFirst { it > currentMinutes }
-                currentNextIndex = if (idx != -1) idx else 0 // loop to fajr if all passed
+                val calculatedNext = if (idx != -1) idx else 0 // loop to fajr if all passed
+                
+                val nowMs = System.currentTimeMillis()
+                val isAudioPlaying = com.example.service.AzanForegroundService.isPlayingAzan.value
+                val lastFinishedTime = com.example.service.AzanForegroundService.lastAudioFinishedTime.value
+                val audioPrayerIdx = com.example.service.AzanForegroundService.lastAudioPrayerIndex.value
+                val fifteenMinMs = 15 * 60 * 1000L
+
+                if (isAudioPlaying && audioPrayerIdx in 0..5) {
+                    currentNextIndex = audioPrayerIdx
+                } else if (audioPrayerIdx in 0..5 && lastFinishedTime > 0L && (nowMs - lastFinishedTime) < fifteenMinMs) {
+                    // For 15 minutes after audio finishes, keep highlighted on this prayer!
+                    currentNextIndex = audioPrayerIdx
+                } else {
+                    // After 15 minutes have passed since audio finished, advance to the next upcoming prayer!
+                    currentNextIndex = calculatedNext
+                }
 
                 // In-app prayer time audio playback trigger (plays user audio once and closes)
                 val prayerPairs = listOf(
@@ -811,6 +839,8 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
 
     var expandedIndex by remember(currentNextIndex) { mutableIntStateOf(currentNextIndex) }
 
+    val isPlayingAzan by com.example.service.AzanForegroundService.isPlayingAzan.collectAsState()
+
     LaunchedEffect(currentNextIndex, isToday) {
         if (isToday && currentNextIndex != -1) {
             expandedIndex = currentNextIndex
@@ -821,7 +851,6 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
         modifier = modifier,
         verticalArrangement = Arrangement.spacedBy(6.dp)
     ) {
-        val isPlayingAzan by com.example.service.AzanForegroundService.isPlayingAzan.collectAsState()
         if (isPlayingAzan) {
             Card(
                 modifier = Modifier
@@ -903,7 +932,9 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
                 onToggle = { enabled -> viewModel.toggleAzan(triple.first, enabled) },
                 onPrayedToggle = {
                     if (isToday && !prayedList[index]) {
-                        val prayerCal = parseTimeToCalendar(triple.third, Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")))
+                        val prayerCal = parseTimeToCalendar(triple.third, Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))).apply {
+                            add(Calendar.MINUTE, 20)
+                        }
                         val now = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
                         if (now.before(prayerCal)) {
                             val msg = String.format(strings.prayerTimeNotArrivedToast, triple.second, triple.third)
@@ -1341,20 +1372,22 @@ fun Modifier.appBackground(): Modifier {
         .background(
             Brush.verticalGradient(
                 colors = listOf(
-                    Color(0xFF020305),
-                    Color(0xFF05070B),
-                    Color(0xFF020305)
+                    Color(0xFF030509),
+                    Color(0xFF070B12),
+                    Color(0xFF030509)
                 )
             )
         )
+        // Soft glowing background aura
         .background(
             brush = Brush.radialGradient(
                 colors = listOf(
-                    primaryColor.copy(alpha = 0.10f),
+                    primaryColor.copy(alpha = 0.22f),
+                    primaryColor.copy(alpha = 0.08f),
                     Color.Transparent
                 ),
-                center = Offset(500f, 300f),
-                radius = 900f
+                center = Offset(500f, 320f),
+                radius = 1100f
             )
         )
         .islamicStarBackground(primaryColor)
