@@ -179,7 +179,7 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
 
     Scaffold(
         modifier = modifier.fillMaxSize(),
-        containerColor = Color.Transparent,
+        containerColor = Color.Black,
         bottomBar = {
             Surface(
                 color = Color(0xFF0A1610).copy(alpha = 0.96f),
@@ -1356,19 +1356,7 @@ fun AzanSlot(
 
 @Composable
 fun Modifier.appBackground(): Modifier {
-    val primaryColor = MaterialTheme.colorScheme.primary
-    return this
-        .background(
-            Brush.verticalGradient(
-                colors = listOf(
-                    Color(0xFF030509),
-                    Color(0xFF070B12),
-                    Color(0xFF030509)
-                )
-            )
-        )
-        .islamicStarBackground(primaryColor)
-        .animatedWavingLines(primaryColor)
+    return this.background(Color.Black)
 }
 
 // Draw starry sky decoration with Islamic overlay overlay
