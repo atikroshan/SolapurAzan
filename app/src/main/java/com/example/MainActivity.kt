@@ -6,9 +6,13 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloatAsState
@@ -73,17 +77,57 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material.icons.outlined.*
 import androidx.compose.animation.core.rememberInfiniteTransition
+import android.content.BroadcastReceiver
+import android.content.Context
+import android.content.IntentFilter
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.material.icons.filled.VolumeUp
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
+import com.example.data.MasjidItem
+import com.example.ui.MasjidSelectorDropdown
 
 class MainActivity : ComponentActivity() {
 
+    private var isScreenOffReceiverRegistered = false
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                // User requirement: When phone off/power button is pressed, immediately stop audio
+                if (com.example.service.AzanForegroundService.isPlayingAzan.value) {
+                    val stopIntent = Intent(this@MainActivity, com.example.service.AzanForegroundService::class.java).apply {
+                        action = "STOP_AZAN"
+                    }
+                    startService(stopIntent)
+                }
+            }
+        }
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        if (isScreenOffReceiverRegistered) {
+            try {
+                unregisterReceiver(screenOffReceiver)
+                isScreenOffReceiverRegistered = false
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        try {
+            val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+            registerReceiver(screenOffReceiver, filter)
+            isScreenOffReceiverRegistered = true
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         
         java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
         
@@ -159,7 +203,25 @@ class MainActivity : ComponentActivity() {
 
 @Composable
 fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier: Modifier = Modifier) {
+    val context = LocalContext.current
+    val isRamazanActive = remember {
+        val current = java.util.Calendar.getInstance()
+        val target = java.util.Calendar.getInstance().apply {
+            set(2027, java.util.Calendar.FEBRUARY, 5, 0, 0, 0)
+            set(java.util.Calendar.MILLISECOND, 0)
+        }
+        current.timeInMillis >= target.timeInMillis
+    }
+
     var selectedTab by remember { mutableStateOf("home") } // "record", "home", or "ramazan"
+    var showAdminLoginDialog by remember { mutableStateOf(false) }
+    var showAdminPanel by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isRamazanActive) {
+        if (!isRamazanActive && selectedTab == "ramazan") {
+            selectedTab = "home"
+        }
+    }
 
     val homeLabel = when (uiState.language) {
         "ur" -> "ہوم"
@@ -177,10 +239,18 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
         else -> "Ramazan"
     }
 
-    Scaffold(
-        modifier = modifier.fillMaxSize(),
-        containerColor = Color.Black,
-        bottomBar = {
+    if (showAdminPanel) {
+        BackHandler { showAdminPanel = false }
+        AdminPanelScreen(
+            viewModel = viewModel,
+            uiState = uiState,
+            onBack = { showAdminPanel = false }
+        )
+    } else {
+        Scaffold(
+            modifier = modifier.fillMaxSize(),
+            containerColor = Color.Black,
+            bottomBar = {
             Surface(
                 color = Color(0xFF0A1610).copy(alpha = 0.96f),
                 contentColor = Color(0xFFF3DE8E),
@@ -217,10 +287,22 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                     // Right: Ramazan Section Button (Circle shape)
                     NavCircleItem(
                         selected = selectedTab == "ramazan",
-                        onClick = { selectedTab = "ramazan" },
+                        onClick = {
+                            if (isRamazanActive) {
+                                selectedTab = "ramazan"
+                            } else {
+                                val msg = when (uiState.language) {
+                                    "ur" -> "رمضان سیکشن 5 فروری 2027 سے دستیاب ہوگا"
+                                    "hi" -> "रमज़ान सेक्शन 5 फ़रवरी 2027 से शुरू होगा"
+                                    else -> "Ramazan section will be available from 5 Feb 2027"
+                                }
+                                android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                        },
                         icon = if (selectedTab == "ramazan") Icons.Filled.NightsStay else Icons.Outlined.NightsStay,
                         label = ramazanLabel,
-                        testTag = "nav_ramazan_button"
+                        testTag = "nav_ramazan_button",
+                        enabled = isRamazanActive
                     )
                 }
             }
@@ -261,12 +343,24 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                     else -> {
                         AzanHomeContent(
                             viewModel = viewModel,
-                            uiState = uiState
+                            uiState = uiState,
+                            onOpenAdminLogin = { showAdminLoginDialog = true }
                         )
                     }
                 }
             }
         }
+    }
+    }
+
+    if (showAdminLoginDialog) {
+        AdminLoginDialog(
+            onDismiss = { showAdminLoginDialog = false },
+            onLoginSuccess = {
+                showAdminLoginDialog = false
+                showAdminPanel = true
+            }
+        )
     }
 }
 
@@ -274,6 +368,7 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
 fun AzanHomeContent(
     viewModel: AzanViewModel,
     uiState: com.example.ui.UIState,
+    onOpenAdminLogin: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -286,8 +381,17 @@ fun AzanHomeContent(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f),
-            verticalArrangement = Arrangement.spacedBy(14.dp)
+            verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Masjid Dropdown Selector (100+ Masajid)
+            MasjidSelectorDropdown(
+                selectedMasjid = uiState.selectedMasjid,
+                allMasajid = uiState.allMasajid,
+                language = uiState.language,
+                onSelectMasjid = { masjid -> viewModel.selectMasjid(masjid.id) },
+                onLanguageSelect = { lang -> viewModel.setLanguage(lang) }
+            )
+
             // Replaced Header: Time, Gregorian Date & Urdu Date
             ClockDisplay(
                 selectedDate = uiState.selectedDate,
@@ -296,6 +400,7 @@ fun AzanHomeContent(
                 onPrevDay = { viewModel.previousDay() },
                 onNextDay = { viewModel.nextDay() },
                 onToday = { viewModel.selectToday() },
+                onOpenAdminLogin = onOpenAdminLogin,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -321,9 +426,9 @@ fun AzanHomeContent(
         }
 
         Text(
-            text = "Powered by @tek",
+            text = "v2.1.3 • Powered by @tek",
             fontSize = 10.sp,
-            color = Color.White.copy(alpha = 0.3f),
+            color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp, bottom = 4.dp),
@@ -410,6 +515,7 @@ fun ClockDisplay(
     onPrevDay: () -> Unit,
     onNextDay: () -> Unit,
     onToday: () -> Unit,
+    onOpenAdminLogin: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var currentTime by remember { mutableStateOf(Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))) }
@@ -584,7 +690,9 @@ fun ClockDisplay(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Column(
-                    modifier = Modifier.padding(bottom = 10.dp),
+                    modifier = Modifier
+                        .padding(bottom = 10.dp)
+                        .widthIn(min = 36.dp),
                     horizontalAlignment = Alignment.Start
                 ) {
                     Row {
@@ -611,6 +719,33 @@ fun ClockDisplay(
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
                         color = TextColor
+                    )
+                }
+                Spacer(modifier = Modifier.width(16.dp))
+                Box(
+                    modifier = Modifier
+                        .padding(bottom = 12.dp)
+                        .clip(RoundedCornerShape(6.dp))
+                        .clickable { onOpenAdminLogin() }
+                        .background(
+                            brush = Brush.horizontalGradient(
+                                listOf(Color(0xFF1E293B), Color(0xFF0F172A))
+                            )
+                        )
+                        .border(
+                            width = 1.dp,
+                            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
+                            shape = RoundedCornerShape(6.dp)
+                        )
+                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        text = "IST",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.ExtraBold,
+                        color = MaterialTheme.colorScheme.secondary,
+                        letterSpacing = 1.sp
                     )
                 }
             }
@@ -903,11 +1038,17 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
         slots.forEachIndexed { index, triple ->
             val isNext = isToday && (index == currentNextIndex)
             val isExpanded = (index == expandedIndex)
+            val jammatTimeStr = if (triple.first != "Tahajjud") {
+                getEffectiveJammatTime(triple.first, triple.third, uiState.customJammatTimes, isFridayToday, uiState.selectedMasjid)
+            } else {
+                ""
+            }
             
             AzanSlot(
                 systemName = triple.first,
                 displayName = triple.second,
                 time = triple.third,
+                jammatTime = jammatTimeStr,
                 enabled = toggles[index],
                 isNext = isNext,
                 icon = icons[index],
@@ -993,6 +1134,7 @@ fun AzanSlot(
     systemName: String,
     displayName: String,
     time: String,
+    jammatTime: String = "",
     enabled: Boolean,
     isNext: Boolean,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
@@ -1029,12 +1171,12 @@ fun AzanSlot(
     val tintColor = MaterialTheme.colorScheme.primary
     val strings = LocalAppStrings.current
 
-    val googleColors = listOf(
-        Color(0xFF4285F4),
-        Color(0xFFEA4335),
-        Color(0xFFFBBC05),
-        Color(0xFF34A853),
-        Color(0xFF4285F4)
+    val islamicGlowColors = listOf(
+        Color(0xFFF59E0B),
+        Color(0xFF10B981),
+        Color(0xFFFBBF24),
+        Color(0xFF34D399),
+        Color(0xFFF59E0B)
     )
 
     Card(
@@ -1067,15 +1209,15 @@ fun AzanSlot(
                     val center = flareProgress * size.width
                     val span = size.width * 0.7f
                     
-                    // Sharp shining animated border (Google speech style)
+                    // Sharp shining animated border (Celestial Islamic theme)
                     drawRoundRect(
                         brush = Brush.horizontalGradient(
                             colors = listOf(
                                 Color.Transparent,
-                                googleColors[0],
-                                googleColors[1],
-                                googleColors[2],
-                                googleColors[3],
+                                islamicGlowColors[0],
+                                islamicGlowColors[1],
+                                islamicGlowColors[2],
+                                islamicGlowColors[3],
                                 Color.Transparent
                             ),
                             startX = center - span,
@@ -1109,7 +1251,7 @@ fun AzanSlot(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 14.dp, vertical = if (isNext) 22.dp else 7.dp),
+                    .padding(horizontal = 14.dp, vertical = if (isNext) 10.dp else 7.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
@@ -1172,7 +1314,19 @@ fun AzanSlot(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    PrayerTimeDisplay(time24 = time, isNext = isNext)
+                    if (!isNext) {
+                        if (systemName == "Tahajjud") {
+                            PrayerTimeDisplay(time24 = time, isNext = false)
+                        } else {
+                            AzanJammatDisplay(
+                                azanTime24 = time,
+                                jammatTime24 = jammatTime,
+                                isNext = false
+                            )
+                        }
+                    } else if (systemName == "Tahajjud") {
+                        PrayerTimeDisplay(time24 = time, isNext = true)
+                    }
                     
                     IconButton(onClick = onPrayedToggle, modifier = Modifier.size(32.dp)) {
                         Icon(
@@ -1229,6 +1383,16 @@ fun AzanSlot(
                         modifier = Modifier.size(20.dp)
                     )
                 }
+            }
+            
+            if (isNext && systemName != "Tahajjud") {
+                HighlightedAzanJammatDisplay(
+                    azanTime24 = time,
+                    jammatTime24 = jammatTime,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 14.dp, end = 14.dp, top = 2.dp, bottom = 12.dp)
+                )
             }
             
             androidx.compose.animation.AnimatedVisibility(visible = expanded) {
@@ -1492,6 +1656,224 @@ fun formatTo12Hour(time24: String): String {
     return String.format(java.util.Locale.US, "%02d:%02d %s", displayHour, minute, suffix)
 }
 
+fun calculateJammatTime(systemName: String, azanTime24: String, isFriday: Boolean = false): String {
+    if (azanTime24 == "--:--" || !azanTime24.contains(":")) return "--:--"
+    val parts = azanTime24.split(":")
+    if (parts.size != 2) return azanTime24
+    val h = parts[0].toIntOrNull() ?: return azanTime24
+    val m = parts[1].toIntOrNull() ?: return azanTime24
+
+    if (systemName == "Dhuhr" && isFriday) {
+        return "13:30" // 01:30 PM Jum'ah Jamaat
+    }
+
+    val offsetMinutes = when (systemName) {
+        "Fajr" -> 25
+        "Dhuhr" -> 20
+        "Asr" -> 20
+        "Maghrib" -> 10
+        "Isha" -> 20
+        else -> 0
+    }
+    val totalMins = (h * 60 + m + offsetMinutes) % (24 * 60)
+    val jammatH = totalMins / 60
+    val jammatM = totalMins % 60
+    return String.format(java.util.Locale.US, "%02d:%02d", jammatH, jammatM)
+}
+
+fun getEffectiveJammatTime(
+    systemName: String,
+    azanTime24: String,
+    customJammatMap: Map<String, String>,
+    isFriday: Boolean = false,
+    masjid: MasjidItem? = null
+): String {
+    if (systemName.equals("Jumah", ignoreCase = true) || systemName.equals("Jum'ah", ignoreCase = true) || (systemName.equals("Dhuhr", ignoreCase = true) && isFriday)) {
+        val customJumah = customJammatMap["jumah"]
+        if (!customJumah.isNullOrEmpty()) {
+            return customJumah
+        }
+        return masjid?.jumahJammatTime ?: "13:30"
+    }
+    val custom = customJammatMap[systemName.lowercase()]
+    if (!custom.isNullOrEmpty()) {
+        return custom
+    }
+    if (masjid != null && azanTime24.contains(":")) {
+        val offset = when (systemName.lowercase()) {
+            "fajr" -> masjid.fajrJammatOffset
+            "dhuhr" -> masjid.dhuhrJammatOffset
+            "asr" -> masjid.asrJammatOffset
+            "maghrib" -> masjid.maghribJammatOffset
+            "isha" -> masjid.ishaJammatOffset
+            else -> 20
+        }
+        val parts = azanTime24.split(":")
+        val h = parts[0].toIntOrNull() ?: 0
+        val m = parts[1].toIntOrNull() ?: 0
+        val totalMins = (h * 60 + m + offset) % (24 * 60)
+        return String.format(java.util.Locale.US, "%02d:%02d", totalMins / 60, totalMins % 60)
+    }
+    return calculateJammatTime(systemName, azanTime24, isFriday)
+}
+
+@Composable
+fun AzanJammatDisplay(
+    azanTime24: String,
+    jammatTime24: String,
+    isNext: Boolean
+) {
+    val strings = LocalAppStrings.current
+    val azanFormatted = formatTo12Hour(azanTime24)
+    val jammatFormatted = formatTo12Hour(jammatTime24)
+
+    val labelColor = if (isNext) Color(0xFFF3DE8E) else TextMuted
+    val timeBrush = if (isNext) {
+        Brush.verticalGradient(listOf(Color(0xFFF3DE8E), Color(0xFFE5A93C)))
+    } else {
+        Brush.verticalGradient(listOf(Color.White, Color(0xFFD1D5DB)))
+    }
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center,
+        modifier = Modifier.padding(end = 4.dp)
+    ) {
+        // Azan column: Name on top, time below
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = strings.azanLabel,
+                fontSize = if (isNext) 10.sp else 8.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = labelColor,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = azanFormatted,
+                fontSize = if (isNext) 12.sp else 10.5.sp,
+                fontWeight = if (isNext) FontWeight.Black else FontWeight.Bold,
+                style = androidx.compose.ui.text.TextStyle(brush = timeBrush)
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 6.dp)
+                .width(1.dp)
+                .height(if (isNext) 24.dp else 18.dp)
+                .background(Color.White.copy(alpha = if (isNext) 0.35f else 0.15f))
+        )
+
+        // Jammat column: Name on top, time below
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = strings.jammatLabel,
+                fontSize = if (isNext) 10.sp else 8.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = if (isNext) Color(0xFF86EFAC) else TextMuted,
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(1.dp))
+            Text(
+                text = jammatFormatted,
+                fontSize = if (isNext) 12.sp else 10.5.sp,
+                fontWeight = if (isNext) FontWeight.Black else FontWeight.Bold,
+                style = androidx.compose.ui.text.TextStyle(
+                    brush = if (isNext) {
+                        Brush.verticalGradient(listOf(Color(0xFF86EFAC), Color(0xFF22C55E)))
+                    } else timeBrush
+                )
+            )
+        }
+    }
+}
+
+@Composable
+fun HighlightedAzanJammatDisplay(
+    azanTime24: String,
+    jammatTime24: String,
+    modifier: Modifier = Modifier
+) {
+    val strings = LocalAppStrings.current
+    val azanFormatted = formatTo12Hour(azanTime24)
+    val jammatFormatted = formatTo12Hour(jammatTime24)
+
+    Row(
+        modifier = modifier,
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.Center
+    ) {
+        // Azan column: Name on top, big time below (center aligned)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = strings.azanLabel,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFFF3DE8E),
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = azanFormatted,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Black,
+                style = androidx.compose.ui.text.TextStyle(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFFFFF1B8), Color(0xFFE5A93C))
+                    )
+                )
+            )
+        }
+
+        Box(
+            modifier = Modifier
+                .padding(horizontal = 20.dp)
+                .width(1.5.dp)
+                .height(32.dp)
+                .background(
+                    brush = Brush.verticalGradient(
+                        listOf(
+                            Color.Transparent,
+                            Color(0xFFFFD700).copy(alpha = 0.6f),
+                            Color.Transparent
+                        )
+                    )
+                )
+        )
+
+        // Jammat column: Name on top, big time below (center aligned)
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = strings.jammatLabel,
+                fontSize = 11.5.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color(0xFF86EFAC),
+                letterSpacing = 0.5.sp
+            )
+            Spacer(modifier = Modifier.height(2.dp))
+            Text(
+                text = jammatFormatted,
+                fontSize = 20.sp,
+                fontWeight = FontWeight.Black,
+                style = androidx.compose.ui.text.TextStyle(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(Color(0xFFA7F3D0), Color(0xFF22C55E))
+                    )
+                )
+            )
+        }
+    }
+}
+
 @Composable
 fun PrayerTimeDisplay(time24: String, isNext: Boolean) {
     val formatted = formatTo12Hour(time24)
@@ -1565,18 +1947,647 @@ fun Modifier.animatedWavingLines(primaryColor: Color) = composed {
     }
 }
 
+data class AdminPrayerItem(
+    val systemName: String,
+    val displayName: String,
+    val icon: ImageVector,
+    val azanTime: String,
+    val jammatTime: String
+)
+
+@Composable
+fun AdminLoginDialog(
+    onDismiss: () -> Unit,
+    onLoginSuccess: () -> Unit
+) {
+    var adminId by remember { mutableStateOf("") }
+    var password by remember { mutableStateOf("") }
+    var isError by remember { mutableStateOf(false) }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF101625)),
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)),
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(vertical = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.15f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.AdminPanelSettings,
+                        contentDescription = "Admin",
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Text(
+                    text = "ADMIN LOGIN",
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.secondary,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "Enter ID & Password to edit prayer timings",
+                    fontSize = 11.sp,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = adminId,
+                    onValueChange = {
+                        adminId = it
+                        isError = false
+                    },
+                    label = { Text("Admin ID") },
+                    placeholder = { Text("admin") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(10.dp))
+
+                OutlinedTextField(
+                    value = password,
+                    onValueChange = {
+                        password = it
+                        isError = false
+                    },
+                    label = { Text("Password") },
+                    placeholder = { Text("••••") },
+                    singleLine = true,
+                    visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = MaterialTheme.colorScheme.secondary,
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (isError) {
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Text(
+                        text = "Incorrect ID or Password (Default: admin / admin)",
+                        color = Color(0xFFEF4444),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(18.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.7f))
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            val id = adminId.trim().lowercase()
+                            val pass = password.trim()
+                            if ((id == "admin" || id == "ist") && (pass == "admin" || pass == "1234" || pass == "admin123" || pass == "azan")) {
+                                isError = false
+                                onLoginSuccess()
+                            } else {
+                                isError = true
+                            }
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = Color(0xFF0F172A)
+                        )
+                    ) {
+                        Text("Login", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AdminPanelScreen(
+    viewModel: AzanViewModel,
+    uiState: com.example.ui.UIState,
+    onBack: () -> Unit
+) {
+    val context = LocalContext.current
+    val strings = LocalAppStrings.current
+    val primaryColor = MaterialTheme.colorScheme.primary
+    val isFridayToday = uiState.selectedDate.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
+    val dhuhrLabel = if (isFridayToday) strings.jumah else strings.dhuhr.uppercase()
+
+    val timings = uiState.todayTimings
+    val fajrAzan = timings?.fajr ?: "05:40"
+    val zoharAzan = if (isFridayToday) "12:35" else (timings?.dhuhr ?: "12:35")
+    val jumahAzan = uiState.customJumahAzan ?: "12:30"
+    val asrAzan = timings?.asr ?: "16:25"
+    val maghribAzan = timings?.maghrib ?: "18:05"
+    val ishaAzan = timings?.isha ?: "19:25"
+
+    val fajrJammat = getEffectiveJammatTime("Fajr", fajrAzan, uiState.customJammatTimes, false)
+    val zoharJammat = getEffectiveJammatTime("Dhuhr", zoharAzan, uiState.customJammatTimes, false)
+    val jumahJammat = getEffectiveJammatTime("Jumah", jumahAzan, uiState.customJammatTimes, true)
+    val asrJammat = getEffectiveJammatTime("Asr", asrAzan, uiState.customJammatTimes, false)
+    val maghribJammat = getEffectiveJammatTime("Maghrib", maghribAzan, uiState.customJammatTimes, false)
+    val ishaJammat = getEffectiveJammatTime("Isha", ishaAzan, uiState.customJammatTimes, false)
+
+    val adminPrayers = listOf(
+        AdminPrayerItem("Fajr", strings.fajr.uppercase(), Icons.Outlined.WbTwilight, fajrAzan, fajrJammat),
+        AdminPrayerItem("Zohar", strings.dhuhr.uppercase(), Icons.Outlined.WbSunny, zoharAzan, zoharJammat),
+        AdminPrayerItem("Jumah", strings.jumah, Icons.Outlined.WbSunny, jumahAzan, jumahJammat),
+        AdminPrayerItem("Asr", strings.asr.uppercase(), Icons.Outlined.WbCloudy, asrAzan, asrJammat),
+        AdminPrayerItem("Maghrib", strings.maghrib.uppercase(), Icons.Outlined.NightsStay, maghribAzan, maghribJammat),
+        AdminPrayerItem("Isha", strings.isha.uppercase(), Icons.Outlined.Nightlight, ishaAzan, ishaJammat)
+    )
+
+    var editingPrayer by remember { mutableStateOf<AdminPrayerItem?>(null) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .appBackground()
+            .islamicStarBackground(primaryColor)
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .padding(horizontal = 16.dp, vertical = 8.dp)
+        ) {
+            // Top Bar
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(38.dp)
+                            .background(Color(0xFF1E293B), CircleShape)
+                    ) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back",
+                            tint = MaterialTheme.colorScheme.secondary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                    Column {
+                        Text(
+                            text = "ADMIN PANEL",
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.Black,
+                            color = MaterialTheme.colorScheme.secondary,
+                            letterSpacing = 1.sp
+                        )
+                        Text(
+                            text = "Edit Namaz Azan & Jammat Timings",
+                            fontSize = 11.sp,
+                            color = TextMuted
+                        )
+                    }
+                }
+
+                Button(
+                    onClick = onBack,
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFF1E293B),
+                        contentColor = MaterialTheme.colorScheme.secondary
+                    ),
+                    shape = RoundedCornerShape(8.dp),
+                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
+                ) {
+                    Text("Done", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Language Switcher Row (Same as Home Page)
+            LanguageToggleRow(uiState.language) { viewModel.setLanguage(it) }
+
+            Spacer(modifier = Modifier.height(14.dp))
+
+            // 6 prayer slots: Fajr to Isha with generous spacing
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .weight(1f)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(14.dp)
+            ) {
+                adminPrayers.forEach { item ->
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1522).copy(alpha = 0.88f)),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.12f)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 16.dp, vertical = 15.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            // Left: Icon + Prayer Name
+                            Row(
+                                modifier = Modifier.weight(1f, fill = false),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(Color(0xFF1A2234), RoundedCornerShape(10.dp)),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = item.icon,
+                                        contentDescription = item.displayName,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(22.dp)
+                                    )
+                                }
+
+                                Text(
+                                    text = item.displayName,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = TextColor
+                                )
+                            }
+
+                            // Center & Right: Azan & Jammat time + Pencil Button
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                AzanJammatDisplay(
+                                    azanTime24 = item.azanTime,
+                                    jammatTime24 = item.jammatTime,
+                                    isNext = false
+                                )
+
+                                IconButton(
+                                    onClick = { editingPrayer = item },
+                                    modifier = Modifier
+                                        .size(40.dp)
+                                        .background(Color(0xFF1E293B), RoundedCornerShape(8.dp))
+                                        .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Edit,
+                                        contentDescription = "Edit ${item.displayName}",
+                                        tint = Color(0xFFF3DE8E),
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // Info footer card filling bottom space elegantly
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111827).copy(alpha = 0.8f)),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.CheckCircle,
+                            contentDescription = null,
+                            tint = Color(0xFF86EFAC),
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Timings saved here reflect immediately on the Home screen clock, Namaz cards, and Azan alarms.",
+                            fontSize = 11.5.sp,
+                            color = TextColor.copy(alpha = 0.85f),
+                            lineHeight = 16.sp
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(20.dp))
+            }
+        }
+
+        // Edit Dialog
+        editingPrayer?.let { prayer ->
+            EditPrayerTimingDialog(
+                prayer = prayer,
+                onDismiss = { editingPrayer = null },
+                onSave = { newAzan, newJammat ->
+                    viewModel.updatePrayerAndJammatTime(prayer.systemName, newAzan, newJammat)
+                    val msg = "${prayer.displayName} updated: Azan $newAzan • Jammat $newJammat"
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    editingPrayer = null
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun EditPrayerTimingDialog(
+    prayer: AdminPrayerItem,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    var azanInput by remember { mutableStateOf(prayer.azanTime) }
+    var jammatInput by remember { mutableStateOf(prayer.jammatTime) }
+    var errorText by remember { mutableStateOf("") }
+
+    fun normalizeInputTime(timeStr: String): String? {
+        val clean = timeStr.trim()
+        val parts = clean.split(":")
+        if (parts.size != 2) return null
+        val h = parts[0].toIntOrNull() ?: return null
+        val m = parts[1].toIntOrNull() ?: return null
+        if (h !in 0..23 || m !in 0..59) return null
+        return String.format(Locale.US, "%02d:%02d", h, m)
+    }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF101625)),
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
+            modifier = Modifier
+                .fillMaxWidth(0.92f)
+                .padding(vertical = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(54.dp)
+                        .background(Color(0xFF1E293B), CircleShape)
+                        .border(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = prayer.icon,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.secondary,
+                        modifier = Modifier.size(28.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Text(
+                    text = "EDIT ${prayer.displayName.uppercase()}",
+                    fontSize = 22.sp,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.secondary,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "Set Azan and Jammat times (24-hour HH:MM format)",
+                    fontSize = 13.sp,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center
+                )
+
+                Spacer(modifier = Modifier.height(20.dp))
+
+                OutlinedTextField(
+                    value = azanInput,
+                    onValueChange = {
+                        azanInput = it
+                        errorText = ""
+                    },
+                    label = { Text("Azan Time (HH:MM)", fontSize = 14.sp) },
+                    placeholder = { Text("e.g. 05:40", fontSize = 14.sp) },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFFF3DE8E),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
+                        focusedLabelColor = Color(0xFFF3DE8E),
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                OutlinedTextField(
+                    value = jammatInput,
+                    onValueChange = {
+                        jammatInput = it
+                        errorText = ""
+                    },
+                    label = { Text("Jammat Time (HH:MM)", fontSize = 14.sp) },
+                    placeholder = { Text("e.g. 06:05", fontSize = 14.sp) },
+                    singleLine = true,
+                    textStyle = androidx.compose.ui.text.TextStyle(
+                        fontSize = 20.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.White
+                    ),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF86EFAC),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
+                        focusedLabelColor = Color(0xFF86EFAC),
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                val normAzan = normalizeInputTime(azanInput)
+                val normJammat = normalizeInputTime(jammatInput)
+                val previewAzan = if (normAzan != null) formatTo12Hour(normAzan) else "--:--"
+                val previewJammat = if (normJammat != null) formatTo12Hour(normJammat) else "--:--"
+
+                Spacer(modifier = Modifier.height(18.dp))
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Color(0xFF1E293B).copy(alpha = 0.8f), RoundedCornerShape(12.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column {
+                        Text(text = "AZAN (12h)", fontSize = 11.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = previewAzan,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFFF3DE8E)
+                        )
+                    }
+                    Box(
+                        modifier = Modifier
+                            .width(1.5.dp)
+                            .height(28.dp)
+                            .background(Color.White.copy(alpha = 0.2f))
+                    )
+                    Column(horizontalAlignment = Alignment.End) {
+                        Text(text = "JAMMAT (12h)", fontSize = 11.sp, color = TextMuted, fontWeight = FontWeight.Bold)
+                        Text(
+                            text = previewJammat,
+                            fontSize = 17.sp,
+                            fontWeight = FontWeight.ExtraBold,
+                            color = Color(0xFF86EFAC)
+                        )
+                    }
+                }
+
+                if (errorText.isNotEmpty()) {
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text(
+                        text = errorText,
+                        color = Color(0xFFEF4444),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(22.dp))
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.8f)),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
+                    ) {
+                        Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                    }
+
+                    Button(
+                        onClick = {
+                            val validAzan = normalizeInputTime(azanInput)
+                            val validJammat = normalizeInputTime(jammatInput)
+                            if (validAzan == null) {
+                                errorText = "Please enter valid Azan time (e.g. 05:40)"
+                                return@Button
+                            }
+                            if (validJammat == null) {
+                                errorText = "Please enter valid Jammat time (e.g. 06:05)"
+                                return@Button
+                            }
+                            onSave(validAzan, validJammat)
+                        },
+                        modifier = Modifier
+                            .weight(1f)
+                            .height(50.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = Color(0xFF0F172A)
+                        )
+                    ) {
+                        Text("Save Timings", fontSize = 15.sp, fontWeight = FontWeight.Black)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun NavCircleItem(
     selected: Boolean,
     onClick: () -> Unit,
     icon: ImageVector,
     label: String,
-    testTag: String
+    testTag: String,
+    enabled: Boolean = true
 ) {
+    val scale by animateFloatAsState(
+        targetValue = if (selected) 1.08f else 1.0f,
+        animationSpec = androidx.compose.animation.core.spring(stiffness = androidx.compose.animation.core.Spring.StiffnessMediumLow),
+        label = "navScale"
+    )
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
         modifier = Modifier
+            .scale(scale)
             .clickable(
                 interactionSource = remember { MutableInteractionSource() },
                 indication = null,
@@ -1590,11 +2601,19 @@ private fun NavCircleItem(
                 .size(46.dp)
                 .clip(CircleShape)
                 .background(
-                    if (selected) Color(0xFFF3DE8E) else Color(0xFF14261B)
+                    when {
+                        selected -> Color(0xFFF3DE8E)
+                        !enabled -> Color(0xFF14261B).copy(alpha = 0.5f)
+                        else -> Color(0xFF14261B)
+                    }
                 )
                 .border(
                     width = if (selected) 2.dp else 1.dp,
-                    color = if (selected) Color(0xFFFFD700) else Color(0xFFF3DE8E).copy(alpha = 0.3f),
+                    color = when {
+                        selected -> Color(0xFFFFD700)
+                        !enabled -> Color(0xFFF3DE8E).copy(alpha = 0.15f)
+                        else -> Color(0xFFF3DE8E).copy(alpha = 0.3f)
+                    },
                     shape = CircleShape
                 ),
             contentAlignment = Alignment.Center
@@ -1602,7 +2621,11 @@ private fun NavCircleItem(
             Icon(
                 imageVector = icon,
                 contentDescription = label,
-                tint = if (selected) Color(0xFF0F2618) else Color(0xFFF3DE8E).copy(alpha = 0.85f),
+                tint = when {
+                    selected -> Color(0xFF0F2618)
+                    !enabled -> Color(0xFFF3DE8E).copy(alpha = 0.4f)
+                    else -> Color(0xFFF3DE8E).copy(alpha = 0.85f)
+                },
                 modifier = Modifier.size(24.dp)
             )
         }
@@ -1611,7 +2634,11 @@ private fun NavCircleItem(
             text = label,
             fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
             fontSize = 11.sp,
-            color = if (selected) Color(0xFFF3DE8E) else Color.White.copy(alpha = 0.65f),
+            color = when {
+                selected -> Color(0xFFF3DE8E)
+                !enabled -> Color.White.copy(alpha = 0.35f)
+                else -> Color.White.copy(alpha = 0.65f)
+            },
             textAlign = TextAlign.Center
         )
     }

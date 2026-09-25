@@ -1,6 +1,6 @@
 {
   "name": "AZAN TIME",
-  "description": "Offline Azan timing and Ramazan tracker application with prayer logs, Taqwa points, and Zakat calculator",
+  "description": "Offline Azan timing and Ramazan tracker application with prayer logs, Taqwa points, and Zakat calculator (v2.1.3)",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

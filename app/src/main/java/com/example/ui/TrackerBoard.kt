@@ -321,9 +321,9 @@ fun TrackerBoardContent(
             }
 
             Text(
-                text = "Powered by @tek",
+                text = "v2.1.3 • Powered by @tek",
                 fontSize = 10.sp,
-                color = Color.White.copy(alpha = 0.3f),
+                color = Color.White.copy(alpha = 0.4f),
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(top = 12.dp),
@@ -343,6 +343,12 @@ fun TrackerBoardContent(
         }
         val yesterdayMonth = yesterdayCal.get(Calendar.MONTH) + 1
         val yesterdayDay = yesterdayCal.get(Calendar.DAY_OF_MONTH)
+        val targetCal = Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata")).apply {
+            set(Calendar.MONTH, month - 1)
+            set(Calendar.DAY_OF_MONTH, day)
+        }
+        val isTargetFriday = targetCal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
+        val dhuhrDisplayName = if (isTargetFriday) appStrings.jumah else appStrings.dhuhr
         val isToday = (month == todayMonth && day == todayDay)
         val isYesterday = (month == yesterdayMonth && day == yesterdayDay)
         val isEditable = isToday || isYesterday
@@ -495,7 +501,7 @@ fun TrackerBoardContent(
                     }
 
                     InteractivePrayerRow(appStrings.fajr, "Fajr", log?.fajrPrayed ?: false, Color(0xFF90CAF9))
-                    InteractivePrayerRow(appStrings.dhuhr, "Dhuhr", log?.dhuhrPrayed ?: false, Color(0xFFFFEB3B))
+                    InteractivePrayerRow(dhuhrDisplayName, "Dhuhr", log?.dhuhrPrayed ?: false, Color(0xFFFFEB3B))
                     InteractivePrayerRow(appStrings.asr, "Asr", log?.asrPrayed ?: false, Color(0xFFFFB74D))
                     InteractivePrayerRow(appStrings.maghrib, "Maghrib", log?.maghribPrayed ?: false, Color(0xFFAB47BC))
                     InteractivePrayerRow(appStrings.isha, "Isha", log?.ishaPrayed ?: false, Color(0xFF5C6BC0))
@@ -527,35 +533,86 @@ fun StatCard(
 ) {
     Card(
         modifier = modifier,
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F1522)),
-        shape = RoundedCornerShape(12.dp),
-        border = BorderStroke(1.dp, Color(0xFF1F293D))
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF0E1524)),
+        shape = RoundedCornerShape(16.dp),
+        border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(Color(0xFFE5B842).copy(alpha = 0.5f), Color(0xFF10B981).copy(alpha = 0.3f))))
     ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().padding(horizontal = 6.dp, vertical = 4.dp),
-            verticalArrangement = Arrangement.Center,
-            horizontalAlignment = Alignment.CenterHorizontally
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF131D32), Color(0xFF0B111D))
+                    )
+                )
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            Text(
-                text = title,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                color = TextMuted,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = value,
-                fontSize = 14.sp,
-                fontWeight = FontWeight.Black,
-                color = color,
-                textAlign = TextAlign.Center
-            )
-            Text(
-                text = subtitle,
-                fontSize = 7.sp,
-                color = TextMuted,
-                textAlign = TextAlign.Center
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Box(
+                    modifier = Modifier
+                        .size(46.dp)
+                        .background(
+                            brush = Brush.radialGradient(
+                                listOf(Color(0xFFFBBF24).copy(alpha = 0.25f), Color(0xFF131D32))
+                            ),
+                            shape = CircleShape
+                        )
+                        .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.4f), CircleShape),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Filled.CheckCircle,
+                        contentDescription = null,
+                        tint = Color(0xFFFFD700),
+                        modifier = Modifier.size(26.dp)
+                    )
+                }
+
+                Column {
+                    Text(
+                        text = title.uppercase(),
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFFFD700),
+                        letterSpacing = 1.sp
+                    )
+                    Text(
+                        text = value,
+                        fontSize = 24.sp,
+                        fontWeight = FontWeight.Black,
+                        style = androidx.compose.ui.text.TextStyle(
+                            brush = Brush.verticalGradient(
+                                listOf(Color(0xFFF3DE8E), Color(0xFFE5B842))
+                            )
+                        )
+                    )
+                    Text(
+                        text = subtitle,
+                        fontSize = 9.5.sp,
+                        color = TextMuted
+                    )
+                }
+            }
+
+            Box(
+                modifier = Modifier
+                    .background(Color(0xFF10B981).copy(alpha = 0.15f), RoundedCornerShape(8.dp))
+                    .border(1.dp, Color(0xFF10B981).copy(alpha = 0.35f), RoundedCornerShape(8.dp))
+                    .padding(horizontal = 10.dp, vertical = 6.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = "v2.1.3",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.ExtraBold,
+                    color = Color(0xFF34D399)
+                )
+            }
         }
     }
 }
@@ -1269,6 +1326,9 @@ fun MonthPointHistoryCalendar(
                 letterSpacing = 1.sp
             )
 
+            val isYesterdayFriday = yesterdayCal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
+            val isTodayFriday = todayCal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
+
             // Yesterday Card
             DayPrayerEditorCard(
                 label = appStrings.yesterdaySimple,
@@ -1277,6 +1337,7 @@ fun MonthPointHistoryCalendar(
                 badgeColor = Color(0xFF25D366),
                 isToday = false,
                 todayTimings = uiState.todayTimings,
+                isFriday = isYesterdayFriday,
                 onTogglePrayer = { prayerName ->
                     onTogglePrayer(yesterdayMonth, yesterdayDay, prayerName)
                 }
@@ -1290,6 +1351,7 @@ fun MonthPointHistoryCalendar(
                 badgeColor = Color(0xFFEAB308),
                 isToday = true,
                 todayTimings = uiState.todayTimings,
+                isFriday = isTodayFriday,
                 onTogglePrayer = { prayerName ->
                     onTogglePrayer(todayMonth, todayDay, prayerName)
                 }
@@ -1306,14 +1368,16 @@ fun DayPrayerEditorCard(
     badgeColor: Color,
     isToday: Boolean,
     todayTimings: AzanTiming?,
+    isFriday: Boolean = false,
     onTogglePrayer: (String) -> Unit
 ) {
     val context = LocalContext.current
     val appStrings = com.example.ui.theme.LocalAppStrings.current
     val completedCount = log?.getCompletedPrayersCount() ?: 0
+    val dhuhrLabel = if (isFriday) appStrings.jumah else appStrings.dhuhr
     val prayers = listOf(
         Triple("Fajr", appStrings.fajr, log?.fajrPrayed ?: false),
-        Triple("Dhuhr", appStrings.dhuhr, log?.dhuhrPrayed ?: false),
+        Triple("Dhuhr", dhuhrLabel, log?.dhuhrPrayed ?: false),
         Triple("Asr", appStrings.asr, log?.asrPrayed ?: false),
         Triple("Maghrib", appStrings.maghrib, log?.maghribPrayed ?: false),
         Triple("Isha", appStrings.isha, log?.ishaPrayed ?: false),
@@ -2726,6 +2790,16 @@ fun RamazanScreenContent(
                         onLanguageSelect = onLanguageSelect
                     )
                 }
+
+                Text(
+                    text = "v2.1.3 • Powered by @tek",
+                    fontSize = 10.sp,
+                    color = Color.White.copy(alpha = 0.4f),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(top = 8.dp, bottom = 4.dp),
+                    textAlign = TextAlign.Center
+                )
             }
         }
     }

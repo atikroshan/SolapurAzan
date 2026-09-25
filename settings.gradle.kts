@@ -19,5 +19,5 @@ dependencyResolutionManagement {
     }
 }
 
-rootProject.name = "AZAN TIME"
+rootProject.name = "Offline Azan"
 include(":app")

@@ -4,8 +4,10 @@ import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.app.Service
+import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -18,6 +20,16 @@ import kotlinx.coroutines.flow.MutableStateFlow
 
 class AzanForegroundService : Service() {
     private var mediaPlayer: MediaPlayer? = null
+    private var isScreenReceiverRegistered = false
+
+    private val screenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                // User requirement: When phone off/power button is pressed, immediately stop audio
+                stopAzanAudio()
+            }
+        }
+    }
 
     companion object {
         val isPlayingAzan = MutableStateFlow(false)
@@ -75,10 +87,7 @@ class AzanForegroundService : Service() {
         }
 
         if (intent?.action == "STOP_AZAN") {
-            isPlayingAzan.value = false
-            currentPlayingPrayerName.value = null
-            recordAudioFinished(this, System.currentTimeMillis(), lastAudioPrayerIndex.value)
-            stopSelf()
+            stopAzanAudio()
             return START_NOT_STICKY
         }
 
@@ -108,9 +117,60 @@ class AzanForegroundService : Service() {
             
         startForeground(1, notification)
 
+        registerScreenOffReceiver()
         playAzan()
 
         return START_NOT_STICKY
+    }
+
+    private fun registerScreenOffReceiver() {
+        if (!isScreenReceiverRegistered) {
+            try {
+                val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+                registerReceiver(screenOffReceiver, filter)
+                isScreenReceiverRegistered = true
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun unregisterScreenOffReceiver() {
+        if (isScreenReceiverRegistered) {
+            try {
+                unregisterReceiver(screenOffReceiver)
+                isScreenReceiverRegistered = false
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    private fun stopAzanAudio() {
+        unregisterScreenOffReceiver()
+        isPlayingAzan.value = false
+        currentPlayingPrayerName.value = null
+        recordAudioFinished(this, System.currentTimeMillis(), lastAudioPrayerIndex.value)
+        try {
+            if (mediaPlayer?.isPlaying == true) {
+                mediaPlayer?.stop()
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        } finally {
+            try {
+                mediaPlayer?.release()
+            } catch (e: Exception) {
+                e.printStackTrace()
+            }
+            mediaPlayer = null
+        }
+        try {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        stopSelf()
     }
 
     private fun playAzan() {
@@ -182,6 +242,7 @@ class AzanForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        unregisterScreenOffReceiver()
         if (isPlayingAzan.value) {
             recordAudioFinished(this, System.currentTimeMillis(), lastAudioPrayerIndex.value)
         }
