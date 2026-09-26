@@ -158,8 +158,12 @@ class AzanViewModel(
         val d = cal.get(Calendar.DAY_OF_MONTH)
         val isFriday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
         repository.getTimingsForDate(m, d).map { timing ->
-            if (isFriday && timing != null) {
-                timing.copy(dhuhr = "12:30")
+            if (timing != null) {
+                if (isFriday) {
+                    timing.copy(dhuhr = "12:30")
+                } else {
+                    timing.copy(dhuhr = "13:30")
+                }
             } else {
                 timing
             }
@@ -184,9 +188,13 @@ class AzanViewModel(
         // Adjust timings according to the selected Masjid
         val adjustedTimings = timings?.applyMasjidOffsets(selectedMasjid)
 
-        val effectiveTimings = if (isFriday && adjustedTimings != null) {
-            val jumahAzan = customJumahAzan ?: adjustTime(selectedMasjid.jumahAzanTime, selectedMasjid.dhuhrOffset)
-            adjustedTimings.copy(dhuhr = jumahAzan)
+        val effectiveTimings = if (adjustedTimings != null) {
+            if (isFriday) {
+                val jumahAzan = customJumahAzan ?: adjustTime(selectedMasjid.jumahAzanTime, selectedMasjid.dhuhrOffset)
+                adjustedTimings.copy(dhuhr = jumahAzan)
+            } else {
+                adjustedTimings.copy(dhuhr = "13:30")
+            }
         } else {
             adjustedTimings
         }

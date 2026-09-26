@@ -456,40 +456,19 @@ fun MasjidSelectionDialog(
 
                                         Spacer(modifier = Modifier.height(4.dp))
 
-                                        // 3. ID Tag & Timings
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        // 3. ID Tag
+                                        Box(
+                                            modifier = Modifier
+                                                .background(Color(0xFF1E293B), RoundedCornerShape(6.dp))
+                                                .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
+                                                .padding(horizontal = 6.dp, vertical = 2.dp)
                                         ) {
-                                            // ID Badge
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(Color(0xFF1E293B), RoundedCornerShape(6.dp))
-                                                    .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(
-                                                    text = "ID: #${masjid.id}",
-                                                    fontSize = 11.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = Color(0xFFF3DE8E)
-                                                )
-                                            }
-
-                                            // Jum'ah Timing Badge
-                                            Box(
-                                                modifier = Modifier
-                                                    .background(Color(0xFF064E3B).copy(alpha = 0.6f), RoundedCornerShape(6.dp))
-                                                    .border(1.dp, Color(0xFF22C55E).copy(alpha = 0.4f), RoundedCornerShape(6.dp))
-                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
-                                            ) {
-                                                Text(
-                                                    text = "${strings.jumahLabel}: ${masjid.jumahAzanTime} | ${masjid.jumahJammatTime}",
-                                                    fontSize = 10.5.sp,
-                                                    fontWeight = FontWeight.SemiBold,
-                                                    color = Color(0xFF86EFAC)
-                                                )
-                                            }
+                                            Text(
+                                                text = "ID: #${masjid.id}",
+                                                fontSize = 11.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = Color(0xFFF3DE8E)
+                                            )
                                         }
                                     }
                                 }

@@ -426,7 +426,7 @@ fun AzanHomeContent(
         }
 
         Text(
-            text = "v2.1.3 • Powered by @tek",
+            text = "v2.2.0 • Powered by @tek",
             fontSize = 10.sp,
             color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier
@@ -928,7 +928,7 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
     val dhuhrLabel = if (isFridayToday) strings.jumah else strings.dhuhr.uppercase()
     val slots = listOf(
         Triple("Fajr", strings.fajr.uppercase(), uiState.todayTimings?.fajr ?: "--:--"),
-        Triple("Dhuhr", dhuhrLabel, uiState.todayTimings?.dhuhr ?: if (isFridayToday) "12:30" else "--:--"),
+        Triple("Dhuhr", dhuhrLabel, uiState.todayTimings?.dhuhr ?: if (isFridayToday) "12:30" else "13:30"),
         Triple("Asr", strings.asr.uppercase(), uiState.todayTimings?.asr ?: "--:--"),
         Triple("Maghrib", strings.maghrib.uppercase(), uiState.todayTimings?.maghrib ?: "--:--"),
         Triple("Isha", strings.isha.uppercase(), uiState.todayTimings?.isha ?: "--:--"),
