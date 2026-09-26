@@ -6,6 +6,9 @@
     <uses-permission android:name="android.permission.USE_EXACT_ALARM" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.VIBRATE" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
 
     <application
         android:allowBackup="true"
@@ -24,8 +27,13 @@
             </intent-filter>
         </activity>
 
+        <service
+            android:name=".service.AzanForegroundService"
+            android:foregroundServiceType="mediaPlayback"
+            android:exported="false" />
+
         <receiver
-            android:name=".notifications.AzanAlarmReceiver"
+            android:name=".receiver.AzanAlarmReceiver"
             android:exported="false">
             <intent-filter>
                 <action android:name="android.intent.action.BOOT_COMPLETED" />

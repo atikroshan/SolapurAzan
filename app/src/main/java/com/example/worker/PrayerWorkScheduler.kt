@@ -114,15 +114,19 @@ object PrayerWorkScheduler {
     }
 
     fun scheduleDailySync(context: Context) {
-        val syncRequest = PeriodicWorkRequestBuilder<PrayerDailySyncWorker>(
-            12, TimeUnit.HOURS
-        ).build()
+        try {
+            val syncRequest = PeriodicWorkRequestBuilder<PrayerDailySyncWorker>(
+                12, TimeUnit.HOURS
+            ).build()
 
-        WorkManager.getInstance(context).enqueueUniquePeriodicWork(
-            DAILY_SYNC_WORK_NAME,
-            ExistingPeriodicWorkPolicy.KEEP,
-            syncRequest
-        )
+            WorkManager.getInstance(context).enqueueUniquePeriodicWork(
+                DAILY_SYNC_WORK_NAME,
+                ExistingPeriodicWorkPolicy.KEEP,
+                syncRequest
+            )
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 
     fun cancelPrayerNotification(context: Context, prayerName: String) {

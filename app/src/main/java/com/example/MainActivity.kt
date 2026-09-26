@@ -123,16 +123,23 @@ class MainActivity : ComponentActivity() {
         
         try {
             val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
-            registerReceiver(screenOffReceiver, filter)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                registerReceiver(screenOffReceiver, filter, Context.RECEIVER_EXPORTED)
+            } else {
+                registerReceiver(screenOffReceiver, filter)
+            }
             isScreenOffReceiverRegistered = true
-        } catch (e: Exception) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
         
-        java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
-        
-        com.example.service.AzanForegroundService.initFromPrefs(this)
-        com.example.worker.PrayerWorkScheduler.scheduleDailySync(applicationContext)
+        try {
+            java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+            com.example.service.AzanForegroundService.initFromPrefs(this)
+            com.example.worker.PrayerWorkScheduler.scheduleDailySync(applicationContext)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
         
         val isAlarm = intent.getBooleanExtra("FROM_ALARM", false)
         if (isAlarm) {
@@ -426,7 +433,7 @@ fun AzanHomeContent(
         }
 
         Text(
-            text = "v2.2.0 • Powered by @tek",
+            text = "v2.2.1 • Powered by @tek",
             fontSize = 10.sp,
             color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier
@@ -856,22 +863,28 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
     var currentNextIndex by remember { mutableIntStateOf(initialNextIndex) }
     var lastTriggeredMinute by remember { mutableStateOf("") }
     val context = androidx.compose.ui.platform.LocalContext.current
+    var lastObservedDayOfYear by remember { mutableIntStateOf(Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")).get(Calendar.DAY_OF_YEAR)) }
     
-    LaunchedEffect(uiState.todayTimings, uiState.fajrEnabled, uiState.dhuhrEnabled, uiState.asrEnabled, uiState.maghribEnabled, uiState.ishaEnabled) {
+    LaunchedEffect(Unit) {
         while (true) {
-            viewModel.refreshDate()
+            val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
+            val todayDayOfYear = cal.get(Calendar.DAY_OF_YEAR)
+            if (todayDayOfYear != lastObservedDayOfYear) {
+                lastObservedDayOfYear = todayDayOfYear
+                viewModel.refreshDate()
+            }
+
             val timings = uiState.todayTimings
             if (timings != null) {
-                val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
                 val currentHour = cal.get(Calendar.HOUR_OF_DAY)
                 val currentMin = cal.get(Calendar.MINUTE)
                 val currentMinutes = currentHour * 60 + currentMin
-                val currentTimeStr = String.format("%02d:%02d", currentHour, currentMin)
+                val currentTimeStr = String.format(java.util.Locale.US, "%02d:%02d", currentHour, currentMin)
                 
                 val slots = listOf(timings.fajr, timings.dhuhr, timings.asr, timings.maghrib, timings.isha, "01:30")
                 val minutesSlots = slots.map { 
                     val p = it.split(":")
-                    if(p.size == 2) p[0].toInt() * 60 + p[1].toInt() else 0
+                    if (p.size == 2) (p[0].toIntOrNull() ?: 0) * 60 + (p[1].toIntOrNull() ?: 0) else 0
                 }
                 
                 val idx = minutesSlots.indexOfFirst { it > currentMinutes }
@@ -901,20 +914,23 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
                     "Maghrib" to (timings.maghrib to uiState.maghribEnabled),
                     "Isha" to (timings.isha to uiState.ishaEnabled)
                 )
-                val dayOfYear = cal.get(Calendar.DAY_OF_YEAR)
                 for ((name, pair) in prayerPairs) {
                     val (timeStr, isEnabled) = pair
                     if (isEnabled && timeStr == currentTimeStr) {
-                        val triggerKey = "$name-$currentTimeStr-$dayOfYear"
+                        val triggerKey = "$name-$currentTimeStr-$todayDayOfYear"
                         if (lastTriggeredMinute != triggerKey) {
                             lastTriggeredMinute = triggerKey
-                            val serviceIntent = Intent(context, com.example.service.AzanForegroundService::class.java).apply {
-                                putExtra("AZAN_NAME", name)
-                            }
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                context.startForegroundService(serviceIntent)
-                            } else {
-                                context.startService(serviceIntent)
+                            try {
+                                val serviceIntent = Intent(context, com.example.service.AzanForegroundService::class.java).apply {
+                                    putExtra("AZAN_NAME", name)
+                                }
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                    context.startForegroundService(serviceIntent)
+                                } else {
+                                    context.startService(serviceIntent)
+                                }
+                            } catch (e: Throwable) {
+                                e.printStackTrace()
                             }
                         }
                     }

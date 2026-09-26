@@ -15,11 +15,15 @@ class AzanAlarmReceiver : BroadcastReceiver() {
             putExtra("AZAN_NAME", azanName)
         }
         
-        // Start Foreground Service
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-            context.startForegroundService(serviceIntent)
-        } else {
-            context.startService(serviceIntent)
+        // Start Foreground Service safely
+        try {
+            if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
         }
     }
 }

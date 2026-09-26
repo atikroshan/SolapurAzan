@@ -89,19 +89,23 @@ class AlarmScheduler(private val context: Context) {
                     pendingIntent
                 )
             }
-        } catch (e: SecurityException) {
+        } catch (e: Throwable) {
             e.printStackTrace()
         }
     }
 
     fun cancelAzan(name: String) {
-        val intent = Intent(context, AzanAlarmReceiver::class.java)
-        val pendingIntent = PendingIntent.getBroadcast(
-            context,
-            name.hashCode(),
-            intent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-        alarmManager.cancel(pendingIntent)
+        try {
+            val intent = Intent(context, AzanAlarmReceiver::class.java)
+            val pendingIntent = PendingIntent.getBroadcast(
+                context,
+                name.hashCode(),
+                intent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            alarmManager.cancel(pendingIntent)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 }

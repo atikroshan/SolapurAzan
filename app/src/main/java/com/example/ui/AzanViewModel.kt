@@ -270,11 +270,15 @@ class AzanViewModel(
                 .distinctUntilChanged()
                 .collect { s ->
                     s.timings?.let { t ->
-                        if (s.f) alarmScheduler.scheduleAzan("Fajr", t.fajr) else alarmScheduler.cancelAzan("Fajr")
-                        if (s.d) alarmScheduler.scheduleAzan("Dhuhr", t.dhuhr) else alarmScheduler.cancelAzan("Dhuhr")
-                        if (s.a) alarmScheduler.scheduleAzan("Asr", t.asr) else alarmScheduler.cancelAzan("Asr")
-                        if (s.m) alarmScheduler.scheduleAzan("Maghrib", t.maghrib) else alarmScheduler.cancelAzan("Maghrib")
-                        if (s.i) alarmScheduler.scheduleAzan("Isha", t.isha) else alarmScheduler.cancelAzan("Isha")
+                        try {
+                            if (s.f) alarmScheduler.scheduleAzan("Fajr", t.fajr) else alarmScheduler.cancelAzan("Fajr")
+                            if (s.d) alarmScheduler.scheduleAzan("Dhuhr", t.dhuhr) else alarmScheduler.cancelAzan("Dhuhr")
+                            if (s.a) alarmScheduler.scheduleAzan("Asr", t.asr) else alarmScheduler.cancelAzan("Asr")
+                            if (s.m) alarmScheduler.scheduleAzan("Maghrib", t.maghrib) else alarmScheduler.cancelAzan("Maghrib")
+                            if (s.i) alarmScheduler.scheduleAzan("Isha", t.isha) else alarmScheduler.cancelAzan("Isha")
+                        } catch (e: Throwable) {
+                            e.printStackTrace()
+                        }
                     }
                 }
             }

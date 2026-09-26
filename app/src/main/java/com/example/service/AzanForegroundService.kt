@@ -115,7 +115,15 @@ class AzanForegroundService : Service() {
             .setOngoing(true)
             .build()
             
-        startForeground(1, notification)
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                startForeground(1, notification, android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PLAYBACK)
+            } else {
+                startForeground(1, notification)
+            }
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
 
         registerScreenOffReceiver()
         playAzan()
