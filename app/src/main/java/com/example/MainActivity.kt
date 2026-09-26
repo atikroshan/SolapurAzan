@@ -299,6 +299,9 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                             onLanguageSelect = { viewModel.setLanguage(it) },
                             onTogglePrayer = { month, day, prayerName ->
                                 viewModel.togglePrayerForDate(month, day, prayerName)
+                            },
+                            onRestorePoints = { points ->
+                                viewModel.setRestoredTaqwaPoints(points)
                             }
                         )
                     }
@@ -394,7 +397,7 @@ fun AzanHomeContent(
         }
 
         Text(
-            text = "v2.2.2 • Powered by @tek",
+            text = "v2.2.3 • Powered by @tek",
             fontSize = 10.sp,
             color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier

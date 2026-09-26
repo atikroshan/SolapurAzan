@@ -29,6 +29,9 @@ import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.example.LanguageToggleRow
 import com.example.data.MasjidItem
+import com.example.data.getLocalizedName
+import com.example.data.getLocalizedArea
+import com.example.data.getLocalizedCity
 
 private class MasjidSelectorStrings(val lang: String) {
     val timetableHeader = when (lang) {
@@ -162,7 +165,7 @@ fun MasjidSelectorDropdown(
                         }
                     }
                     Text(
-                        text = "${selectedMasjid.name} (${selectedMasjid.area})",
+                        text = "${selectedMasjid.getLocalizedName(language)} (${selectedMasjid.getLocalizedArea(language)})",
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Bold,
                         color = Color.White,
@@ -219,7 +222,7 @@ fun MasjidSelectionDialog(
     var searchQuery by remember { mutableStateOf("") }
     val strings = remember(language) { MasjidSelectorStrings(language) }
 
-    val filteredMasajid = remember(searchQuery, allMasajid) {
+    val filteredMasajid = remember(searchQuery, allMasajid, language) {
         val q = searchQuery.trim().lowercase()
         if (q.isEmpty()) {
             allMasajid
@@ -229,7 +232,10 @@ fun MasjidSelectionDialog(
                 m.area.lowercase().contains(q) ||
                 m.city.lowercase().contains(q) ||
                 m.state.lowercase().contains(q) ||
-                m.id.lowercase().contains(q)
+                m.id.lowercase().contains(q) ||
+                m.getLocalizedName(language).lowercase().contains(q) ||
+                m.getLocalizedArea(language).lowercase().contains(q) ||
+                m.getLocalizedCity(language).lowercase().contains(q)
             }
         }
     }
@@ -426,7 +432,7 @@ fun MasjidSelectionDialog(
                                     Column(modifier = Modifier.weight(1f)) {
                                         // 1. Masjid Name
                                         Text(
-                                            text = masjid.name,
+                                            text = masjid.getLocalizedName(language),
                                             fontSize = 15.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = if (isCurrent) Color(0xFFF3DE8E) else Color.White
@@ -446,7 +452,7 @@ fun MasjidSelectionDialog(
                                                 modifier = Modifier.size(13.dp)
                                             )
                                             Text(
-                                                text = "${strings.areaLabel}: ${masjid.area}, ${masjid.city}",
+                                                text = "${strings.areaLabel}: ${masjid.getLocalizedArea(language)}, ${masjid.getLocalizedCity(language)}",
                                                 fontSize = 12.sp,
                                                 color = Color.White.copy(alpha = 0.85f),
                                                 maxLines = 1,

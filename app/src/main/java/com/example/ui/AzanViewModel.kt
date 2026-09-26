@@ -44,7 +44,8 @@ data class UIState(
     val customJammatTimes: Map<String, String> = emptyMap(),
     val customJumahAzan: String? = null,
     val selectedMasjid: MasjidItem = MasjidRepository.defaultMasjid,
-    val allMasajid: List<MasjidItem> = MasjidRepository.masajid
+    val allMasajid: List<MasjidItem> = MasjidRepository.masajid,
+    val restoredTaqwaPoints: Int = 0
 )
 
 class AzanViewModel(
@@ -171,15 +172,15 @@ class AzanViewModel(
     }
 
     val uiState: StateFlow<UIState> = combine(
-        combine(prefs.languageFlow, togglesFlow, _currentCalendar, prefs.selectedMasjidIdFlow) { l, t, c, mId -> 
+        combine(prefs.languageFlow, togglesFlow, _currentCalendar, prefs.selectedMasjidIdFlow, prefs.restoredTaqwaPointsFlow) { l, t, c, mId, rPoints -> 
             val masjid = MasjidRepository.getMasjidById(mId)
-            Triple(l, t, Pair(c, masjid))
+            Triple(l, t, Triple(c, masjid, rPoints))
         },
         repository.getAllLogs(),
         timingsFlow,
         combine(prefs.getAllCustomJammatTimes(), prefs.getCustomJumahAzan()) { cj, ja -> Pair(cj, ja) }
-    ) { (language, toggles, calMasjidPair), allLogs, timings, (customJammat, customJumahAzan) ->
-        val (cal, selectedMasjid) = calMasjidPair
+    ) { (language, toggles, calMasjidPoints), allLogs, timings, (customJammat, customJumahAzan) ->
+        val (cal, selectedMasjid, restoredPoints) = calMasjidPoints
         val m = cal.get(Calendar.MONTH) + 1
         val d = cal.get(Calendar.DAY_OF_MONTH)
         val isFriday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
@@ -218,9 +219,16 @@ class AzanViewModel(
             customJammatTimes = customJammat,
             customJumahAzan = customJumahAzan,
             selectedMasjid = selectedMasjid,
-            allMasajid = MasjidRepository.masajid
+            allMasajid = MasjidRepository.masajid,
+            restoredTaqwaPoints = restoredPoints
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UIState())
+
+    fun setRestoredTaqwaPoints(points: Int) {
+        viewModelScope.launch {
+            prefs.setRestoredTaqwaPoints(points)
+        }
+    }
 
     fun selectMasjid(masjidId: String) {
         viewModelScope.launch {

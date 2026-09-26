@@ -13,9 +13,20 @@ private val Context.dataStore by preferencesDataStore(name = "azan_prefs")
 class PreferencesRepository(private val context: Context) {
 
     private val KEY_LANGUAGE = stringPreferencesKey("language")
+    private val KEY_RESTORED_TAQWA_POINTS = androidx.datastore.preferences.core.intPreferencesKey("restored_taqwa_points")
 
     val languageFlow: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_LANGUAGE] ?: "en"
+    }
+
+    val restoredTaqwaPointsFlow: Flow<Int> = context.dataStore.data.map { prefs ->
+        prefs[KEY_RESTORED_TAQWA_POINTS] ?: 0
+    }
+
+    suspend fun setRestoredTaqwaPoints(points: Int) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_RESTORED_TAQWA_POINTS] = points
+        }
     }
 
     suspend fun setLanguage(lang: String) {

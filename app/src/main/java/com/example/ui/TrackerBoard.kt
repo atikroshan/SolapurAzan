@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.*
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -179,7 +180,8 @@ fun TrackerBoardDialog(
     onDateSelected: (Int, Int) -> Unit,
     onLanguageSelect: (String) -> Unit,
     onTogglePrayer: (Int, Int, String) -> Unit = { _, _, _ -> },
-    onDismiss: () -> Unit
+    onDismiss: () -> Unit,
+    onRestorePoints: (Int) -> Unit = {}
 ) {
     androidx.compose.ui.window.Dialog(
         onDismissRequest = onDismiss,
@@ -192,7 +194,8 @@ fun TrackerBoardDialog(
             onDateSelected = onDateSelected,
             onLanguageSelect = onLanguageSelect,
             onTogglePrayer = onTogglePrayer,
-            onBack = onDismiss
+            onBack = onDismiss,
+            onRestorePoints = onRestorePoints
         )
     }
 }
@@ -204,9 +207,11 @@ fun TrackerBoardContent(
     onLanguageSelect: (String) -> Unit,
     onTogglePrayer: (Int, Int, String) -> Unit = { _, _, _ -> },
     onBack: (() -> Unit)? = null,
+    onRestorePoints: (Int) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     var selectedDayInfo by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    var showRestorePointsDialog by remember { mutableStateOf(false) }
 
     val curStrings = when (uiState.language) {
         "hi" -> com.example.ui.theme.HindiStrings
@@ -214,7 +219,22 @@ fun TrackerBoardContent(
         else -> com.example.ui.theme.EnglishStrings
     }
 
-    val totalPoints = remember(uiState.allLogs) { uiState.allLogs.sumOf { it.getFivePrayersCount() } }
+    val totalPoints = remember(uiState.allLogs, uiState.restoredTaqwaPoints) { 
+        uiState.restoredTaqwaPoints + uiState.allLogs.sumOf { it.getFivePrayersCount() } 
+    }
+
+    val currentHijriYear = remember(uiState.selectedDate) {
+        try {
+            val y = uiState.selectedDate.get(java.util.Calendar.YEAR)
+            val m = uiState.selectedDate.get(java.util.Calendar.MONTH) + 1
+            val d = uiState.selectedDate.get(java.util.Calendar.DAY_OF_MONTH)
+            val localDate = java.time.LocalDate.of(y, m, d)
+            val hijrahDate = java.time.chrono.HijrahDate.from(localDate)
+            hijrahDate.get(java.time.temporal.ChronoField.YEAR)
+        } catch (e: Exception) {
+            1448
+        }
+    }
 
     CompositionLocalProvider(com.example.ui.theme.LocalAppStrings provides curStrings) {
         Surface(
@@ -294,14 +314,291 @@ fun TrackerBoardContent(
                         textAlign = TextAlign.Center
                     )
 
-                // Header card for stats: Only Total Points (Tahajjud not counted, Perfect Days and Streak removed)
-                StatCard(
-                    title = curStrings.points,
-                    value = "$totalPoints ${curStrings.ptsUnit}",
-                    subtitle = curStrings.ptsPerPrayerSubtitle,
-                    color = Color(0xFFFFD700),
-                    modifier = Modifier.fillMaxWidth()
-                )
+                // Header card for stats: Total Points + Restore Previous Points
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF0E1524)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Brush.horizontalGradient(listOf(Color(0xFFE5B842).copy(alpha = 0.5f), Color(0xFF10B981).copy(alpha = 0.3f))))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .background(Brush.verticalGradient(listOf(Color(0xFF131D32), Color(0xFF0B111D))))
+                            .padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(46.dp)
+                                        .background(
+                                            brush = Brush.radialGradient(
+                                                listOf(Color(0xFFFBBF24).copy(alpha = 0.25f), Color(0xFF131D32))
+                                            ),
+                                            shape = CircleShape
+                                        )
+                                        .border(1.dp, Color(0xFFFBBF24).copy(alpha = 0.4f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Filled.CheckCircle,
+                                        contentDescription = null,
+                                        tint = Color(0xFFFFD700),
+                                        modifier = Modifier.size(26.dp)
+                                    )
+                                }
+
+                                Column {
+                                    Text(
+                                        text = curStrings.points.uppercase(),
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFFFD700),
+                                        letterSpacing = 1.sp
+                                    )
+                                    Text(
+                                        text = "$totalPoints ${curStrings.ptsUnit}",
+                                        fontSize = 24.sp,
+                                        fontWeight = FontWeight.Black,
+                                        style = androidx.compose.ui.text.TextStyle(
+                                            brush = Brush.verticalGradient(
+                                                listOf(Color(0xFFF3DE8E), Color(0xFFE5B842))
+                                            )
+                                        )
+                                    )
+                                    Text(
+                                        text = curStrings.ptsPerPrayerSubtitle,
+                                        fontSize = 9.5.sp,
+                                        color = TextMuted
+                                    )
+                                }
+                            }
+
+                            // Restore Previous Points Button
+                            OutlinedButton(
+                                onClick = { showRestorePointsDialog = true },
+                                shape = RoundedCornerShape(10.dp),
+                                border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.6f)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = Color(0xFF1E293B)
+                                ),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Refresh,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF3DE8E),
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Text(
+                                        text = when (uiState.language) {
+                                            "ur" -> "پوائنٹس بحال کریں"
+                                            "hi" -> "अंक रीस्टोर करें"
+                                            else -> "Restore Points"
+                                        },
+                                        fontSize = 10.5.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF3DE8E)
+                                    )
+                                }
+                            }
+                        }
+
+                        if (uiState.restoredTaqwaPoints > 0) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(Color(0xFF1E293B).copy(alpha = 0.6f), RoundedCornerShape(8.dp))
+                                    .padding(horizontal = 10.dp, vertical = 5.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween
+                            ) {
+                                Text(
+                                    text = when (uiState.language) {
+                                        "ur" -> "سابقہ بحال شدہ: +${uiState.restoredTaqwaPoints} پوائنٹس"
+                                        "hi" -> "पुराने रीस्टोर किए गए: +${uiState.restoredTaqwaPoints} अंक"
+                                        else -> "Previous Restored: +${uiState.restoredTaqwaPoints} pts"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = Color(0xFF86EFAC),
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = when (uiState.language) {
+                                        "ur" -> "تبدیل کریں"
+                                        "hi" -> "बदलें"
+                                        else -> "Edit"
+                                    },
+                                    fontSize = 11.sp,
+                                    color = Color(0xFFF3DE8E),
+                                    modifier = Modifier.clickable { showRestorePointsDialog = true },
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
+                // 1st Muharram Full Year Cycle Banner
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131D32)),
+                    shape = RoundedCornerShape(12.dp),
+                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 12.dp, vertical = 8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(32.dp)
+                                .background(Color(0xFF166534).copy(alpha = 0.4f), CircleShape)
+                                .border(1.dp, Color(0xFF86EFAC).copy(alpha = 0.5f), CircleShape),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Text(
+                                text = "🌙",
+                                fontSize = 15.sp
+                            )
+                        }
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = when (uiState.language) {
+                                    "ur" -> "یکم محرم سے سالانہ تقویٰ سفر ($currentHijriYear ہجری)"
+                                    "hi" -> "1 मुहर्रम से सालाना तक़वा सफ़र ($currentHijriYear हिजरी)"
+                                    else -> "Annual Taqwa Journey from 1st Muharram ($currentHijriYear AH)"
+                                },
+                                fontSize = 11.5.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF86EFAC)
+                            )
+                            Text(
+                                text = when (uiState.language) {
+                                    "ur" -> "تقویٰ پوائنٹس ہر 1 محرم سے شروع ہو کر مکمل سال جاری رہتے ہیں"
+                                    "hi" -> "तक़वा अंक हर 1 मुहर्रम से शुरू होकर पूरे साल चलते हैं"
+                                    else -> "Taqwa points start every 1st Muharram for the complete year"
+                                },
+                                fontSize = 9.5.sp,
+                                color = TextMuted
+                            )
+                        }
+                    }
+                }
+
+                if (showRestorePointsDialog) {
+                    var inputPoints by remember { mutableStateOf(if (uiState.restoredTaqwaPoints > 0) uiState.restoredTaqwaPoints.toString() else "") }
+                    
+                    AlertDialog(
+                        onDismissRequest = { showRestorePointsDialog = false },
+                        title = {
+                            Text(
+                                text = when (uiState.language) {
+                                    "ur" -> "سابقہ تقویٰ پوائنٹس بحال کریں"
+                                    "hi" -> "पुराने तक़वा अंक रीस्टोर करें"
+                                    else -> "Restore Taqwa Points"
+                                },
+                                fontSize = 17.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF3DE8E)
+                            )
+                        },
+                        text = {
+                            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                                Text(
+                                    text = when (uiState.language) {
+                                        "ur" -> "اپ ڈیٹ سے پہلے کے اپنے تقویٰ پوائنٹس درج کریں۔ وہ محفوظ کر لیے جائیں گے اور آپ کے کل پوائنٹس میں جمع ہو جائیں گے۔"
+                                        "hi" -> "अपडेट से पहले के अपने तक़वा अंक यहाँ दर्ज करें। वे सुरक्षित रूप से आपके कुल अंकों में जुड़ जाएँगे।"
+                                        else -> "Enter your previous Taqwa points from before the update. They will be safely saved and added to your total."
+                                    },
+                                    fontSize = 12.sp,
+                                    color = Color.White.copy(alpha = 0.85f)
+                                )
+
+                                OutlinedTextField(
+                                    value = inputPoints,
+                                    onValueChange = { newValue ->
+                                        if (newValue.all { it.isDigit() } && newValue.length <= 6) {
+                                            inputPoints = newValue
+                                        }
+                                    },
+                                    label = {
+                                        Text(
+                                            text = when (uiState.language) {
+                                                "ur" -> "پوائنٹس کی تعداد"
+                                                "hi" -> "अंकों की संख्या"
+                                                else -> "Number of Points"
+                                            }
+                                        )
+                                    },
+                                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(
+                                        keyboardType = androidx.compose.ui.text.input.KeyboardType.Number
+                                    ),
+                                    singleLine = true,
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFFF3DE8E),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                                        focusedLabelColor = Color(0xFFF3DE8E),
+                                        unfocusedLabelColor = Color.White.copy(alpha = 0.6f)
+                                    ),
+                                    modifier = Modifier.fillMaxWidth()
+                                )
+                            }
+                        },
+                        confirmButton = {
+                            Button(
+                                onClick = {
+                                    val pts = inputPoints.toIntOrNull() ?: 0
+                                    onRestorePoints(pts)
+                                    showRestorePointsDialog = false
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFE5A93C))
+                            ) {
+                                Text(
+                                    text = when (uiState.language) {
+                                        "ur" -> "محفوظ اور بحال کریں"
+                                        "hi" -> "सेव और रीस्टोर करें"
+                                        else -> "Save & Restore"
+                                    },
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF0F172A)
+                                )
+                            }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showRestorePointsDialog = false }) {
+                                Text(
+                                    text = when (uiState.language) {
+                                        "ur" -> "منسوخ"
+                                        "hi" -> "रद्द करें"
+                                        else -> "Cancel"
+                                    },
+                                    color = Color.White.copy(alpha = 0.7f)
+                                )
+                            }
+                        },
+                        containerColor = Color(0xFF141C2E)
+                    )
+                }
 
                 var isCalendarExpanded by remember { mutableStateOf(false) }
 
