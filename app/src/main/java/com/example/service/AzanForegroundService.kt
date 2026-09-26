@@ -135,9 +135,18 @@ class AzanForegroundService : Service() {
         if (!isScreenReceiverRegistered) {
             try {
                 val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
-                registerReceiver(screenOffReceiver, filter)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    androidx.core.content.ContextCompat.registerReceiver(
+                        this,
+                        screenOffReceiver,
+                        filter,
+                        androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+                    )
+                } else {
+                    registerReceiver(screenOffReceiver, filter)
+                }
                 isScreenReceiverRegistered = true
-            } catch (e: Exception) {
+            } catch (e: Throwable) {
                 e.printStackTrace()
             }
         }

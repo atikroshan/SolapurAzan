@@ -91,47 +91,8 @@ import com.example.ui.MasjidSelectorDropdown
 
 class MainActivity : ComponentActivity() {
 
-    private var isScreenOffReceiverRegistered = false
-    private val screenOffReceiver = object : BroadcastReceiver() {
-        override fun onReceive(context: Context?, intent: Intent?) {
-            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
-                // User requirement: When phone off/power button is pressed, immediately stop audio
-                if (com.example.service.AzanForegroundService.isPlayingAzan.value) {
-                    val stopIntent = Intent(this@MainActivity, com.example.service.AzanForegroundService::class.java).apply {
-                        action = "STOP_AZAN"
-                    }
-                    startService(stopIntent)
-                }
-            }
-        }
-    }
-
-    override fun onDestroy() {
-        super.onDestroy()
-        if (isScreenOffReceiverRegistered) {
-            try {
-                unregisterReceiver(screenOffReceiver)
-                isScreenOffReceiverRegistered = false
-            } catch (e: Exception) {
-                e.printStackTrace()
-            }
-        }
-    }
-
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
-        try {
-            val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-                registerReceiver(screenOffReceiver, filter, Context.RECEIVER_EXPORTED)
-            } else {
-                registerReceiver(screenOffReceiver, filter)
-            }
-            isScreenOffReceiverRegistered = true
-        } catch (e: Throwable) {
-            e.printStackTrace()
-        }
         
         try {
             java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
@@ -433,7 +394,7 @@ fun AzanHomeContent(
         }
 
         Text(
-            text = "v2.2.1 • Powered by @tek",
+            text = "v2.2.2 • Powered by @tek",
             fontSize = 10.sp,
             color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier
@@ -853,7 +814,7 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
                 val prayerSlots = listOf(timings.fajr, timings.dhuhr, timings.asr, timings.maghrib, timings.isha)
                 val minutesSlots = prayerSlots.map { 
                     val p = it.split(":")
-                    if (p.size == 2) p[0].toInt() * 60 + p[1].toInt() else 0
+                    if (p.size == 2) (p[0].toIntOrNull() ?: 0) * 60 + (p[1].toIntOrNull() ?: 0) else 0
                 }
                 val idx = minutesSlots.indexOfFirst { it > currentMinutes }
                 if (idx != -1) idx else 0
