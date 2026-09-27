@@ -618,7 +618,7 @@ fun TrackerBoardContent(
             }
 
             Text(
-                text = "v2.1.3 • Powered by @tek",
+                text = "v2.3.0 • Powered by @tek",
                 fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.4f),
                 modifier = Modifier
@@ -904,7 +904,7 @@ fun StatCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "v2.1.3",
+                    text = "v2.3.0",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFF34D399)
@@ -3089,7 +3089,7 @@ fun RamazanScreenContent(
                 }
 
                 Text(
-                    text = "v2.1.3 • Powered by @tek",
+                    text = "v2.3.0 • Powered by @tek",
                     fontSize = 10.sp,
                     color = Color.White.copy(alpha = 0.4f),
                     modifier = Modifier

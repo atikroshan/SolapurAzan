@@ -408,7 +408,7 @@ fun AzanHomeContent(
         }
 
         Text(
-            text = "v2.2.3 • Powered by @tek",
+            text = "v2.3.0 • Powered by @tek",
             fontSize = 10.sp,
             color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier
