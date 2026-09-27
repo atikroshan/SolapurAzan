@@ -14,6 +14,28 @@ class PreferencesRepository(private val context: Context) {
 
     private val KEY_LANGUAGE = stringPreferencesKey("language")
     private val KEY_RESTORED_TAQWA_POINTS = androidx.datastore.preferences.core.intPreferencesKey("restored_taqwa_points")
+    private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
+    private val KEY_CACHED_SHEET_CSV = stringPreferencesKey("cached_sheet_csv")
+
+    val isSetupCompletedFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
+        prefs[KEY_SETUP_COMPLETED] ?: false
+    }
+
+    suspend fun setSetupCompleted(completed: Boolean) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_SETUP_COMPLETED] = completed
+        }
+    }
+
+    val cachedGoogleSheetCsvFlow: Flow<String?> = context.dataStore.data.map { prefs ->
+        prefs[KEY_CACHED_SHEET_CSV]
+    }
+
+    suspend fun setCachedGoogleSheetCsv(csv: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_CACHED_SHEET_CSV] = csv
+        }
+    }
 
     val languageFlow: Flow<String> = context.dataStore.data.map { prefs ->
         prefs[KEY_LANGUAGE] ?: "en"
@@ -89,7 +111,7 @@ class PreferencesRepository(private val context: Context) {
     }
 
     val selectedMasjidIdFlow: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[stringPreferencesKey("selected_masjid_id")] ?: "delhi_jama_masjid"
+        prefs[stringPreferencesKey("selected_masjid_id")] ?: "100111111"
     }
 
     suspend fun setSelectedMasjidId(masjidId: String) {

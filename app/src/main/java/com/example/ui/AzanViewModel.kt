@@ -25,6 +25,9 @@ import kotlinx.coroutines.launch
 import java.util.Calendar
 import java.util.TimeZone
 
+import com.example.data.GoogleSheetMasjidSync
+import kotlinx.coroutines.flow.firstOrNull
+
 data class UIState(
     val language: String = "en",
     val todayTimings: AzanTiming? = null,
@@ -44,8 +47,10 @@ data class UIState(
     val customJammatTimes: Map<String, String> = emptyMap(),
     val customJumahAzan: String? = null,
     val selectedMasjid: MasjidItem = MasjidRepository.defaultMasjid,
-    val allMasajid: List<MasjidItem> = MasjidRepository.masajid,
-    val restoredTaqwaPoints: Int = 0
+    val allMasajid: List<MasjidItem> = MasjidRepository.getAllMasajid(),
+    val restoredTaqwaPoints: Int = 0,
+    val isSetupCompleted: Boolean = true,
+    val isSyncingSheet: Boolean = false
 )
 
 class AzanViewModel(
@@ -56,6 +61,62 @@ class AzanViewModel(
 ) : ViewModel() {
 
     private val _currentCalendar = MutableStateFlow(Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")))
+    private val _isSyncingSheet = MutableStateFlow(false)
+    private val _masajidList = MutableStateFlow<List<MasjidItem>>(MasjidRepository.getAllMasajid())
+
+    init {
+        viewModelScope.launch {
+            try {
+                val cached = prefs.cachedGoogleSheetCsvFlow.firstOrNull()
+                val csvToUse = if (!cached.isNullOrBlank()) cached else GoogleSheetMasjidSync.DEFAULT_CSV_CONTENT
+                val parsed = GoogleSheetMasjidSync.parseCsv(csvToUse)
+                if (parsed.isNotEmpty()) {
+                    MasjidRepository.setDynamicMasajid(parsed)
+                    _masajidList.value = parsed
+                    if (cached.isNullOrBlank()) {
+                        prefs.setCachedGoogleSheetCsv(GoogleSheetMasjidSync.DEFAULT_CSV_CONTENT)
+                    }
+                    val currentSelectedId = prefs.selectedMasjidIdFlow.firstOrNull()
+                    if (currentSelectedId == null || parsed.none { it.id == currentSelectedId }) {
+                        prefs.setSelectedMasjidId(parsed.first().id)
+                    }
+                }
+            } catch (e: Exception) {
+                // Ignore
+            }
+            syncGoogleSheet()
+        }
+    }
+
+    fun syncGoogleSheet() {
+        viewModelScope.launch {
+            try {
+                _isSyncingSheet.value = true
+                val csv = GoogleSheetMasjidSync.fetchCsv()
+                val parsed = GoogleSheetMasjidSync.parseCsv(csv)
+                if (parsed.isNotEmpty()) {
+                    MasjidRepository.setDynamicMasajid(parsed)
+                    _masajidList.value = parsed
+                    prefs.setCachedGoogleSheetCsv(csv)
+                    val currentSelectedId = prefs.selectedMasjidIdFlow.firstOrNull()
+                    if (currentSelectedId == null || parsed.none { it.id == currentSelectedId }) {
+                        prefs.setSelectedMasjidId(parsed.first().id)
+                    }
+                }
+            } catch (e: Exception) {
+                // Fallback to offline / cached
+            } finally {
+                _isSyncingSheet.value = false
+            }
+        }
+    }
+
+    fun completeSetup(masjidId: String) {
+        viewModelScope.launch {
+            prefs.setSelectedMasjidId(masjidId)
+            prefs.setSetupCompleted(true)
+        }
+    }
 
     fun nextDay() {
         val next = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")).apply {
@@ -172,15 +233,25 @@ class AzanViewModel(
     }
 
     val uiState: StateFlow<UIState> = combine(
-        combine(prefs.languageFlow, togglesFlow, _currentCalendar, prefs.selectedMasjidIdFlow, prefs.restoredTaqwaPointsFlow) { l, t, c, mId, rPoints -> 
-            val masjid = MasjidRepository.getMasjidById(mId)
-            Triple(l, t, Triple(c, masjid, rPoints))
+        combine(prefs.languageFlow, togglesFlow, _currentCalendar, prefs.selectedMasjidIdFlow, _masajidList) { l, t, c, mId, masajid -> 
+            val masjid = masajid.find { it.id == mId } ?: masajid.firstOrNull() ?: MasjidRepository.defaultMasjid
+            Triple(l, t, Triple(c, masjid, masajid))
         },
         repository.getAllLogs(),
         timingsFlow,
-        combine(prefs.getAllCustomJammatTimes(), prefs.getCustomJumahAzan()) { cj, ja -> Pair(cj, ja) }
-    ) { (language, toggles, calMasjidPoints), allLogs, timings, (customJammat, customJumahAzan) ->
-        val (cal, selectedMasjid, restoredPoints) = calMasjidPoints
+        combine(
+            prefs.getAllCustomJammatTimes(),
+            prefs.getCustomJumahAzan(),
+            prefs.isSetupCompletedFlow,
+            _isSyncingSheet,
+            prefs.restoredTaqwaPointsFlow
+        ) { cj, ja, setupDone, syncing, restoredPoints ->
+            Triple(Pair(cj, ja), Pair(setupDone, syncing), restoredPoints)
+        }
+    ) { (language, toggles, calMasjidPoints), allLogs, timings, (jammatPair, setupPair, restoredPoints) ->
+        val (cal, selectedMasjid, masajid) = calMasjidPoints
+        val (customJammat, customJumahAzan) = jammatPair
+        val (isSetupCompleted, isSyncingSheet) = setupPair
         val m = cal.get(Calendar.MONTH) + 1
         val d = cal.get(Calendar.DAY_OF_MONTH)
         val isFriday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
@@ -219,8 +290,10 @@ class AzanViewModel(
             customJammatTimes = customJammat,
             customJumahAzan = customJumahAzan,
             selectedMasjid = selectedMasjid,
-            allMasajid = MasjidRepository.masajid,
-            restoredTaqwaPoints = restoredPoints
+            allMasajid = masajid,
+            restoredTaqwaPoints = restoredPoints,
+            isSetupCompleted = isSetupCompleted,
+            isSyncingSheet = isSyncingSheet
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UIState())
 
@@ -241,6 +314,28 @@ class AzanViewModel(
         val m = cal.get(Calendar.MONTH) + 1
         val d = cal.get(Calendar.DAY_OF_MONTH)
         viewModelScope.launch {
+            val curMasjid = uiState.value.selectedMasjid
+            val all = MasjidRepository.getAllMasajid().toMutableList()
+            val existingIdx = all.indexOfFirst { it.id == curMasjid.id }
+            val updatedMasjid = when (prayerName.lowercase()) {
+                "fajr" -> curMasjid.copy(fajrAzanFixed = newAzanTime, fajrJammatFixed = newJammatTime)
+                "zohar", "dhuhr" -> curMasjid.copy(zoharAzanFixed = newAzanTime, zoharJammatFixed = newJammatTime)
+                "jumah", "jum'ah" -> curMasjid.copy(jumahAzanTime = newAzanTime, jumahJammatTime = newJammatTime)
+                "asr" -> curMasjid.copy(asrAzanFixed = newAzanTime, asrJammatFixed = newJammatTime)
+                "maghrib" -> curMasjid.copy(maghribAzanFixed = newAzanTime, maghribJammatFixed = newJammatTime)
+                "isha" -> curMasjid.copy(ishaAzanFixed = newAzanTime, ishaJammatFixed = newJammatTime)
+                else -> curMasjid
+            }
+            if (existingIdx != -1) {
+                all[existingIdx] = updatedMasjid
+            } else {
+                all.add(0, updatedMasjid)
+            }
+            MasjidRepository.setDynamicMasajid(all)
+            _masajidList.value = all
+            val newCsv = GoogleSheetMasjidSync.buildCsv(all)
+            prefs.setCachedGoogleSheetCsv(newCsv)
+
             if (prayerName.equals("Jumah", ignoreCase = true) || prayerName.equals("Jum'ah", ignoreCase = true)) {
                 prefs.setCustomJumahAzan(newAzanTime)
                 prefs.setCustomJammatTime("jumah", newJammatTime)
@@ -250,6 +345,57 @@ class AzanViewModel(
                 prefs.setCustomJammatTime(dbName, newJammatTime)
             }
         }
+    }
+
+    fun saveOrUpdateMasjid(id: String, name: String, address: String, photoUrl: String) {
+        viewModelScope.launch {
+            val all = MasjidRepository.getAllMasajid().toMutableList()
+            val cleanId = id.trim()
+            val existingIdx = all.indexOfFirst { it.id == cleanId }
+            val directPhoto = GoogleSheetMasjidSync.extractGoogleDriveDirectUrl(photoUrl)
+            val updated = if (existingIdx != -1) {
+                all[existingIdx].copy(
+                    name = name.trim(),
+                    area = address.trim(),
+                    photoUrl = directPhoto
+                )
+            } else {
+                MasjidItem(
+                    id = cleanId,
+                    name = name.trim(),
+                    area = address.trim(),
+                    city = "Solapur",
+                    state = "Maharashtra",
+                    photoUrl = directPhoto,
+                    jumahAzanTime = "12:30",
+                    jumahJammatTime = "13:30",
+                    fajrAzanFixed = "05:40",
+                    fajrJammatFixed = "06:15",
+                    zoharAzanFixed = "13:15",
+                    zoharJammatFixed = "13:30",
+                    asrAzanFixed = "17:17",
+                    asrJammatFixed = "17:30",
+                    maghribAzanFixed = "18:10",
+                    maghribJammatFixed = "18:12",
+                    ishaAzanFixed = "19:50",
+                    ishaJammatFixed = "19:59"
+                )
+            }
+            if (existingIdx != -1) {
+                all[existingIdx] = updated
+            } else {
+                all.add(0, updated)
+            }
+            MasjidRepository.setDynamicMasajid(all)
+            _masajidList.value = all
+            val newCsv = GoogleSheetMasjidSync.buildCsv(all)
+            prefs.setCachedGoogleSheetCsv(newCsv)
+            prefs.setSelectedMasjidId(updated.id)
+        }
+    }
+
+    fun getGoogleSheetCsv(): String {
+        return GoogleSheetMasjidSync.buildCsv(MasjidRepository.getAllMasajid())
     }
 
     private data class AlarmScheduleState(

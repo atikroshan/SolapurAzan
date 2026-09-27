@@ -108,17 +108,18 @@ fun MasjidSelectorDropdown(
             .fillMaxWidth()
             .clickable { showDialog = true },
         shape = RoundedCornerShape(14.dp),
-        colors = CardDefaults.cardColors(containerColor = Color(0xFF111726).copy(alpha = 0.9f)),
-        border = BorderStroke(1.dp, Color(0xFFE5A93C).copy(alpha = 0.4f)),
+        colors = CardDefaults.cardColors(containerColor = Color(0xFF111726).copy(alpha = 0.95f)),
+        border = BorderStroke(1.dp, Color(0xFFE5A93C).copy(alpha = 0.45f)),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
+                .padding(horizontal = 14.dp, vertical = 10.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
+            // Left: Mosque Icon + ONLY Masjid Name
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
@@ -126,7 +127,7 @@ fun MasjidSelectorDropdown(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(34.dp)
+                        .size(36.dp)
                         .background(Color(0xFF1E293B), CircleShape)
                         .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f), CircleShape),
                     contentAlignment = Alignment.Center
@@ -135,62 +136,47 @@ fun MasjidSelectorDropdown(
                         imageVector = Icons.Outlined.Mosque,
                         contentDescription = "Mosque",
                         tint = Color(0xFFF3DE8E),
-                        modifier = Modifier.size(18.dp)
+                        modifier = Modifier.size(20.dp)
                     )
                 }
 
-                Column(modifier = Modifier.weight(1f)) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        Text(
-                            text = strings.timetableHeader,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFFF3DE8E),
-                            letterSpacing = 0.8.sp
-                        )
-                        Box(
-                            modifier = Modifier
-                                .background(Color(0xFF166534), RoundedCornerShape(4.dp))
-                                .padding(horizontal = 4.dp, vertical = 1.dp)
-                        ) {
-                            Text(
-                                text = strings.countBadge,
-                                fontSize = 8.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF86EFAC)
-                            )
-                        }
-                    }
-                    Text(
-                        text = "${selectedMasjid.getLocalizedName(language)} (${selectedMasjid.getLocalizedArea(language)})",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
+                // ONLY Selected Masjid Name in this line as requested
+                Text(
+                    text = selectedMasjid.getLocalizedName(language),
+                    fontSize = 17.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFF3DE8E),
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            // Right: Change Button in the exact same line
+            Surface(
+                color = Color(0xFF1E293B),
+                shape = RoundedCornerShape(8.dp),
+                border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f)),
+                modifier = Modifier.clickable { showDialog = true }
             ) {
-                Text(
-                    text = strings.changeBtn,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFFF3DE8E)
-                )
-                Icon(
-                    imageVector = Icons.Filled.KeyboardArrowDown,
-                    contentDescription = "Dropdown",
-                    tint = Color(0xFFF3DE8E),
-                    modifier = Modifier.size(20.dp)
-                )
+                Row(
+                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(5.dp)
+                ) {
+                    Text(
+                        text = strings.changeBtn,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color(0xFFF3DE8E)
+                    )
+                    Icon(
+                        imageVector = Icons.Default.KeyboardArrowDown,
+                        contentDescription = "Select",
+                        tint = Color(0xFFF3DE8E),
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
             }
         }
     }

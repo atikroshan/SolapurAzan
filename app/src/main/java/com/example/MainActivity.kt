@@ -2,6 +2,7 @@ package com.example
 
 import android.Manifest
 import android.content.Intent
+import android.net.Uri
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -10,6 +11,8 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import com.example.ui.FirstTimeSetupScreen
+import com.example.data.GoogleSheetMasjidSync
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -49,6 +52,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
@@ -207,7 +212,13 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
         else -> "Ramazan"
     }
 
-    if (showAdminPanel) {
+    if (!uiState.isSetupCompleted) {
+        FirstTimeSetupScreen(
+            uiState = uiState,
+            onSelectMasjid = { masjid -> viewModel.selectMasjid(masjid.id) },
+            onFinishSetup = { masjidId -> viewModel.completeSetup(masjidId) }
+        )
+    } else if (showAdminPanel) {
         BackHandler { showAdminPanel = false }
         AdminPanelScreen(
             viewModel = viewModel,
@@ -1679,6 +1690,19 @@ fun getEffectiveJammatTime(
     if (!custom.isNullOrEmpty()) {
         return custom
     }
+    if (masjid != null) {
+        val fixed = when (systemName.lowercase()) {
+            "fajr" -> masjid.fajrJammatFixed
+            "dhuhr", "zohar" -> masjid.zoharJammatFixed
+            "asr" -> masjid.asrJammatFixed
+            "maghrib" -> masjid.maghribJammatFixed
+            "isha" -> masjid.ishaJammatFixed
+            else -> null
+        }
+        if (!fixed.isNullOrBlank()) {
+            return fixed
+        }
+    }
     if (masjid != null && azanTime24.contains(":")) {
         val offset = when (systemName.lowercase()) {
             "fajr" -> masjid.fajrJammatOffset
@@ -2095,23 +2119,24 @@ fun AdminPanelScreen(
     val context = LocalContext.current
     val strings = LocalAppStrings.current
     val primaryColor = MaterialTheme.colorScheme.primary
+    val curMasjid = uiState.selectedMasjid
     val isFridayToday = uiState.selectedDate.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
     val dhuhrLabel = if (isFridayToday) strings.jumah else strings.dhuhr.uppercase()
 
     val timings = uiState.todayTimings
-    val fajrAzan = timings?.fajr ?: "05:40"
-    val zoharAzan = if (isFridayToday) "12:35" else (timings?.dhuhr ?: "12:35")
-    val jumahAzan = uiState.customJumahAzan ?: "12:30"
-    val asrAzan = timings?.asr ?: "16:25"
-    val maghribAzan = timings?.maghrib ?: "18:05"
-    val ishaAzan = timings?.isha ?: "19:25"
+    val fajrAzan = curMasjid.fajrAzanFixed ?: timings?.fajr ?: "05:40"
+    val zoharAzan = if (isFridayToday) curMasjid.jumahAzanTime else (curMasjid.zoharAzanFixed ?: timings?.dhuhr ?: "13:15")
+    val jumahAzan = curMasjid.jumahAzanTime
+    val asrAzan = curMasjid.asrAzanFixed ?: timings?.asr ?: "17:17"
+    val maghribAzan = curMasjid.maghribAzanFixed ?: timings?.maghrib ?: "18:10"
+    val ishaAzan = curMasjid.ishaAzanFixed ?: timings?.isha ?: "19:50"
 
-    val fajrJammat = getEffectiveJammatTime("Fajr", fajrAzan, uiState.customJammatTimes, false)
-    val zoharJammat = getEffectiveJammatTime("Dhuhr", zoharAzan, uiState.customJammatTimes, false)
-    val jumahJammat = getEffectiveJammatTime("Jumah", jumahAzan, uiState.customJammatTimes, true)
-    val asrJammat = getEffectiveJammatTime("Asr", asrAzan, uiState.customJammatTimes, false)
-    val maghribJammat = getEffectiveJammatTime("Maghrib", maghribAzan, uiState.customJammatTimes, false)
-    val ishaJammat = getEffectiveJammatTime("Isha", ishaAzan, uiState.customJammatTimes, false)
+    val fajrJammat = curMasjid.fajrJammatFixed ?: getEffectiveJammatTime("Fajr", fajrAzan, uiState.customJammatTimes, false, curMasjid)
+    val zoharJammat = curMasjid.zoharJammatFixed ?: getEffectiveJammatTime("Dhuhr", zoharAzan, uiState.customJammatTimes, false, curMasjid)
+    val jumahJammat = curMasjid.jumahJammatTime
+    val asrJammat = curMasjid.asrJammatFixed ?: getEffectiveJammatTime("Asr", asrAzan, uiState.customJammatTimes, false, curMasjid)
+    val maghribJammat = curMasjid.maghribJammatFixed ?: getEffectiveJammatTime("Maghrib", maghribAzan, uiState.customJammatTimes, false, curMasjid)
+    val ishaJammat = curMasjid.ishaJammatFixed ?: getEffectiveJammatTime("Isha", ishaAzan, uiState.customJammatTimes, false, curMasjid)
 
     val adminPrayers = listOf(
         AdminPrayerItem("Fajr", strings.fajr.uppercase(), Icons.Outlined.WbTwilight, fajrAzan, fajrJammat),
@@ -2123,6 +2148,8 @@ fun AdminPanelScreen(
     )
 
     var editingPrayer by remember { mutableStateOf<AdminPrayerItem?>(null) }
+    var showEditMasjidDialog by remember { mutableStateOf(false) }
+    var showAddMasjidDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -2191,21 +2218,224 @@ fun AdminPanelScreen(
                 }
             }
 
-            Spacer(modifier = Modifier.height(10.dp))
+            Spacer(modifier = Modifier.height(8.dp))
 
             // Language Switcher Row (Same as Home Page)
             LanguageToggleRow(uiState.language) { viewModel.setLanguage(it) }
 
-            Spacer(modifier = Modifier.height(14.dp))
+            Spacer(modifier = Modifier.height(12.dp))
 
-            // 6 prayer slots: Fajr to Isha with generous spacing
+            // Scrollable Content: Active Masjid Card + 6 Prayer Slots
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .weight(1f)
                     .verticalScroll(rememberScrollState()),
-                verticalArrangement = Arrangement.spacedBy(14.dp)
+                verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
+                // Active Masjid Info Card + Cloud Controls
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF111827).copy(alpha = 0.95f)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.5.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                modifier = Modifier.weight(1f)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(42.dp)
+                                        .background(Color(0xFF1E293B), CircleShape)
+                                        .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f), CircleShape),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Outlined.Mosque,
+                                        contentDescription = null,
+                                        tint = Color(0xFFF3DE8E),
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                                Column {
+                                    Text(
+                                        text = curMasjid.name,
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Black,
+                                        color = Color(0xFFF3DE8E),
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Text(
+                                        text = "${curMasjid.area} • ID: #${curMasjid.id}",
+                                        fontSize = 11.5.sp,
+                                        color = Color.White.copy(alpha = 0.8f)
+                                    )
+                                }
+                            }
+
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Surface(
+                                    color = Color(0xFF1E293B),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f)),
+                                    modifier = Modifier.clickable { showEditMasjidDialog = true }
+                                ) {
+                                    Text(
+                                        text = "Edit Info",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFFF3DE8E),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                    )
+                                }
+                                Surface(
+                                    color = Color(0xFF166534),
+                                    shape = RoundedCornerShape(8.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.4f)),
+                                    modifier = Modifier.clickable { showAddMasjidDialog = true }
+                                ) {
+                                    Text(
+                                        text = "+ Add",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color(0xFF86EFAC),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // Google Sheet & Drive Cloud Action Buttons
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    viewModel.syncGoogleSheet()
+                                    android.widget.Toast.makeText(context, "Syncing with Google Sheet...", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1E293B),
+                                    contentColor = Color(0xFF86EFAC)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                                border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f).height(36.dp)
+                            ) {
+                                if (uiState.isSyncingSheet) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(14.dp),
+                                        color = Color(0xFF86EFAC),
+                                        strokeWidth = 2.dp
+                                    )
+                                } else {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(13.dp))
+                                        Text("Sync Sheet", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GoogleSheetMasjidSync.SHEET_EDIT_URL))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Cannot open browser", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1E293B),
+                                    contentColor = Color(0xFFF3DE8E)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                                border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f).height(36.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Text("Open Sheet", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GoogleSheetMasjidSync.DRIVE_FOLDER_URL))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Cannot open browser", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1E293B),
+                                    contentColor = Color(0xFF60A5FA)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                                border = BorderStroke(1.dp, Color(0xFF60A5FA).copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f).height(36.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Text("Drive Photos", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+
+                            Button(
+                                onClick = {
+                                    val csv = viewModel.getGoogleSheetCsv()
+                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                                    val clip = android.content.ClipData.newPlainText("Google Sheet CSV", csv)
+                                    clipboard.setPrimaryClip(clip)
+                                    android.widget.Toast.makeText(context, "CSV copied! Ready to paste into Google Sheet", android.widget.Toast.LENGTH_LONG).show()
+                                },
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = Color(0xFF1E293B),
+                                    contentColor = Color(0xFFC084FC)
+                                ),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                                border = BorderStroke(1.dp, Color(0xFFC084FC).copy(alpha = 0.4f)),
+                                modifier = Modifier.weight(1f).height(36.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
+                                    Text("Copy CSV", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    }
+                }
+
                 adminPrayers.forEach { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -2323,6 +2553,202 @@ fun AdminPanelScreen(
                 }
             )
         }
+
+        // Edit Masjid Dialog
+        if (showEditMasjidDialog) {
+            MasjidInfoDialog(
+                initialMasjid = curMasjid,
+                isNew = false,
+                onDismiss = { showEditMasjidDialog = false },
+                onSave = { id, name, address, photoUrl ->
+                    viewModel.saveOrUpdateMasjid(id, name, address, photoUrl)
+                    android.widget.Toast.makeText(context, "$name updated successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                    showEditMasjidDialog = false
+                }
+            )
+        }
+
+        // Add Masjid Dialog
+        if (showAddMasjidDialog) {
+            MasjidInfoDialog(
+                initialMasjid = null,
+                isNew = true,
+                onDismiss = { showAddMasjidDialog = false },
+                onSave = { id, name, address, photoUrl ->
+                    viewModel.saveOrUpdateMasjid(id, name, address, photoUrl)
+                    android.widget.Toast.makeText(context, "$name added successfully!", android.widget.Toast.LENGTH_SHORT).show()
+                    showAddMasjidDialog = false
+                }
+            )
+        }
+    }
+}
+
+@Composable
+fun MasjidInfoDialog(
+    initialMasjid: MasjidItem?,
+    isNew: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (id: String, name: String, address: String, photoUrl: String) -> Unit
+) {
+    var id by remember { mutableStateOf(initialMasjid?.id ?: "") }
+    var name by remember { mutableStateOf(initialMasjid?.name ?: "") }
+    var address by remember { mutableStateOf(initialMasjid?.area ?: "") }
+    var photoUrl by remember { mutableStateOf(initialMasjid?.photoUrl ?: "") }
+    var errorText by remember { mutableStateOf("") }
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF101625)),
+            border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.6f)),
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .padding(vertical = 16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = if (isNew) "ADD NEW MASJID" else "EDIT MASJID INFO",
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Black,
+                    color = MaterialTheme.colorScheme.secondary,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "Saved masajid display on Home page and sync with Google Sheet & Drive",
+                    fontSize = 11.sp,
+                    color = TextMuted,
+                    textAlign = TextAlign.Center
+                )
+
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = { name = it; errorText = "" },
+                    label = { Text("Masjid Name") },
+                    placeholder = { Text("e.g. Mohammadiya Masjid") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFFF3DE8E),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFFF3DE8E),
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = address,
+                    onValueChange = { address = it; errorText = "" },
+                    label = { Text("Address / Area") },
+                    placeholder = { Text("e.g. Swagat Nagar") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFFF3DE8E),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFFF3DE8E),
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = id,
+                    onValueChange = { id = it; errorText = "" },
+                    label = { Text("Masjid ID") },
+                    placeholder = { Text("e.g. 100111111") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF86EFAC),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFF86EFAC),
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                OutlinedTextField(
+                    value = photoUrl,
+                    onValueChange = { photoUrl = it; errorText = "" },
+                    label = { Text("Google Drive Photo Link") },
+                    placeholder = { Text("https://drive.google.com/file/d/...") },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFF86EFAC),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFF86EFAC),
+                        unfocusedLabelColor = TextMuted
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                if (errorText.isNotEmpty()) {
+                    Text(
+                        text = errorText,
+                        color = Color(0xFFEF4444),
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.8f))
+                    ) {
+                        Text("Cancel")
+                    }
+
+                    Button(
+                        onClick = {
+                            if (name.isBlank()) {
+                                errorText = "Please enter Masjid Name"
+                                return@Button
+                            }
+                            if (address.isBlank()) {
+                                errorText = "Please enter Address"
+                                return@Button
+                            }
+                            if (id.isBlank()) {
+                                errorText = "Please enter Masjid ID"
+                                return@Button
+                            }
+                            onSave(id, name, address, photoUrl)
+                        },
+                        modifier = Modifier.weight(1f).height(48.dp),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.secondary,
+                            contentColor = Color(0xFF0F172A)
+                        )
+                    ) {
+                        Text("Save Masjid", fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -2332,19 +2758,74 @@ fun EditPrayerTimingDialog(
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
-    var azanInput by remember { mutableStateOf(prayer.azanTime) }
-    var jammatInput by remember { mutableStateOf(prayer.jammatTime) }
+    val isFajr = prayer.systemName.equals("Fajr", ignoreCase = true)
+    val defaultIsPm = !isFajr
+
+    fun parseTimeParts(rawTime: String, fallbackPm: Boolean): Triple<String, String, Boolean> {
+        val clean = rawTime.trim()
+        val parts = clean.split(":")
+        if (parts.size != 2) return Triple("08", "00", fallbackPm)
+        val rawH = parts[0].toIntOrNull() ?: 8
+        val m = parts[1].toIntOrNull() ?: 0
+        val isPm = when {
+            rawH in 13..23 -> true
+            rawH == 12 -> true
+            rawH == 0 -> false
+            else -> fallbackPm
+        }
+        val h12 = when {
+            rawH == 0 -> 12
+            rawH > 12 -> rawH - 12
+            else -> rawH
+        }
+        return Triple(
+            String.format(Locale.US, "%02d", h12),
+            String.format(Locale.US, "%02d", m),
+            isPm
+        )
+    }
+
+    val (initAzanH, initAzanM, initAzanPm) = remember(prayer) {
+        parseTimeParts(prayer.azanTime, defaultIsPm)
+    }
+    val (initJammatH, initJammatM, initJammatPm) = remember(prayer) {
+        parseTimeParts(prayer.jammatTime, defaultIsPm)
+    }
+
+    var azanHours by remember { mutableStateOf(initAzanH) }
+    var azanMinutes by remember { mutableStateOf(initAzanM) }
+    var azanIsPm by remember { mutableStateOf(initAzanPm) }
+
+    var jammatHours by remember { mutableStateOf(initJammatH) }
+    var jammatMinutes by remember { mutableStateOf(initJammatM) }
+    var jammatIsPm by remember { mutableStateOf(initJammatPm) }
+
     var errorText by remember { mutableStateOf("") }
 
-    fun normalizeInputTime(timeStr: String): String? {
-        val clean = timeStr.trim()
-        val parts = clean.split(":")
-        if (parts.size != 2) return null
-        val h = parts[0].toIntOrNull() ?: return null
-        val m = parts[1].toIntOrNull() ?: return null
-        if (h !in 0..23 || m !in 0..59) return null
-        return String.format(Locale.US, "%02d:%02d", h, m)
+    fun to24Hour(hStr: String, mStr: String, isPm: Boolean): String? {
+        val h = hStr.trim().toIntOrNull() ?: return null
+        val m = mStr.trim().toIntOrNull() ?: return null
+        if (m !in 0..59) return null
+        val finalH = if (h in 13..23) {
+            h
+        } else if (h in 1..12) {
+            if (isPm) {
+                if (h == 12) 12 else h + 12
+            } else {
+                if (h == 12) 0 else h
+            }
+        } else if (h == 0) {
+            0
+        } else {
+            return null
+        }
+        return String.format(Locale.US, "%02d:%02d", finalH, m)
     }
+
+    val validAzan = to24Hour(azanHours, azanMinutes, azanIsPm)
+    val validJammat = to24Hour(jammatHours, jammatMinutes, jammatIsPm)
+    val previewAzan = if (validAzan != null) formatTo12Hour(validAzan) else "--:--"
+    val previewJammat = if (validJammat != null) formatTo12Hour(validJammat) else "--:--"
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -2355,18 +2836,20 @@ fun EditPrayerTimingDialog(
             colors = CardDefaults.cardColors(containerColor = Color(0xFF101625)),
             border = BorderStroke(1.5.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.6f)),
             modifier = Modifier
-                .fillMaxWidth(0.92f)
-                .padding(vertical = 16.dp)
+                .fillMaxWidth(0.94f)
+                .padding(vertical = 14.dp)
         ) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(24.dp),
+                    .verticalScroll(rememberScrollState())
+                    .padding(20.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
+                // Header with Mosque Icon
                 Box(
                     modifier = Modifier
-                        .size(54.dp)
+                        .size(52.dp)
                         .background(Color(0xFF1E293B), CircleShape)
                         .border(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f), CircleShape),
                     contentAlignment = Alignment.Center
@@ -2375,118 +2858,381 @@ fun EditPrayerTimingDialog(
                         imageVector = prayer.icon,
                         contentDescription = null,
                         tint = MaterialTheme.colorScheme.secondary,
-                        modifier = Modifier.size(28.dp)
+                        modifier = Modifier.size(26.dp)
                     )
                 }
 
-                Spacer(modifier = Modifier.height(12.dp))
+                Spacer(modifier = Modifier.height(10.dp))
 
                 Text(
                     text = "EDIT ${prayer.displayName.uppercase()}",
-                    fontSize = 22.sp,
+                    fontSize = 20.sp,
                     fontWeight = FontWeight.Black,
                     color = MaterialTheme.colorScheme.secondary,
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = "Set Azan and Jammat times (24-hour HH:MM format)",
-                    fontSize = 13.sp,
+                    text = "Hours & Minutes separate for Azan and Jammat",
+                    fontSize = 12.sp,
                     color = TextMuted,
                     textAlign = TextAlign.Center
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
-
-                OutlinedTextField(
-                    value = azanInput,
-                    onValueChange = {
-                        azanInput = it
-                        errorText = ""
-                    },
-                    label = { Text("Azan Time (HH:MM)", fontSize = 14.sp) },
-                    placeholder = { Text("e.g. 05:40", fontSize = 14.sp) },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color(0xFFF3DE8E),
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
-                        focusedLabelColor = Color(0xFFF3DE8E),
-                        unfocusedLabelColor = TextMuted
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
                 Spacer(modifier = Modifier.height(16.dp))
 
-                OutlinedTextField(
-                    value = jammatInput,
-                    onValueChange = {
-                        jammatInput = it
-                        errorText = ""
-                    },
-                    label = { Text("Jammat Time (HH:MM)", fontSize = 14.sp) },
-                    placeholder = { Text("e.g. 06:05", fontSize = 14.sp) },
-                    singleLine = true,
-                    textStyle = androidx.compose.ui.text.TextStyle(
-                        fontSize = 20.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.White
-                    ),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = Color.White,
-                        unfocusedTextColor = Color.White,
-                        focusedBorderColor = Color(0xFF86EFAC),
-                        unfocusedBorderColor = Color.White.copy(alpha = 0.35f),
-                        focusedLabelColor = Color(0xFF86EFAC),
-                        unfocusedLabelColor = TextMuted
-                    ),
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                val normAzan = normalizeInputTime(azanInput)
-                val normJammat = normalizeInputTime(jammatInput)
-                val previewAzan = if (normAzan != null) formatTo12Hour(normAzan) else "--:--"
-                val previewJammat = if (normJammat != null) formatTo12Hour(normJammat) else "--:--"
-
-                Spacer(modifier = Modifier.height(18.dp))
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .background(Color(0xFF1E293B).copy(alpha = 0.8f), RoundedCornerShape(12.dp))
-                        .border(1.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
-                        .padding(horizontal = 16.dp, vertical = 12.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                // 1. AZAN TIME SECTION
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131D2E)),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f))
                 ) {
-                    Column {
-                        Text(text = "AZAN (12h)", fontSize = 11.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = previewAzan,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFFF3DE8E)
-                        )
-                    }
-                    Box(
+                    Column(
                         modifier = Modifier
-                            .width(1.5.dp)
-                            .height(28.dp)
-                            .background(Color.White.copy(alpha = 0.2f))
-                    )
-                    Column(horizontalAlignment = Alignment.End) {
-                        Text(text = "JAMMAT (12h)", fontSize = 11.sp, color = TextMuted, fontWeight = FontWeight.Bold)
-                        Text(
-                            text = previewJammat,
-                            fontSize = 17.sp,
-                            fontWeight = FontWeight.ExtraBold,
-                            color = Color(0xFF86EFAC)
-                        )
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color(0xFFF3DE8E), CircleShape)
+                                )
+                                Text(
+                                    text = "AZAN TIME",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF3DE8E),
+                                    letterSpacing = 0.8.sp
+                                )
+                            }
+                            Text(
+                                text = previewAzan,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF3DE8E)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Azan Hours and Minutes TextFields + AM/PM
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // 1st Text Field: Hours (e.g. 08)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                OutlinedTextField(
+                                    value = azanHours,
+                                    onValueChange = {
+                                        if (it.length <= 2 && it.all { c -> c.isDigit() }) {
+                                            azanHours = it
+                                            errorText = ""
+                                        }
+                                    },
+                                    placeholder = { Text("08", fontSize = 18.sp, color = Color.White.copy(alpha = 0.3f), textAlign = TextAlign.Center) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 22.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    ),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFFF3DE8E),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                                        focusedContainerColor = Color(0xFF1E293B),
+                                        unfocusedContainerColor = Color(0xFF1E293B)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.width(76.dp)
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "1st: HRS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF3DE8E)
+                                )
+                            }
+
+                            Text(
+                                text = ":",
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFFF3DE8E),
+                                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 16.dp)
+                            )
+
+                            // 2nd Text Field: Minutes (e.g. 55)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                OutlinedTextField(
+                                    value = azanMinutes,
+                                    onValueChange = {
+                                        if (it.length <= 2 && it.all { c -> c.isDigit() }) {
+                                            azanMinutes = it
+                                            errorText = ""
+                                        }
+                                    },
+                                    placeholder = { Text("55", fontSize = 18.sp, color = Color.White.copy(alpha = 0.3f), textAlign = TextAlign.Center) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 22.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    ),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFFF3DE8E),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                                        focusedContainerColor = Color(0xFF1E293B),
+                                        unfocusedContainerColor = Color(0xFF1E293B)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.width(76.dp)
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "2nd: MIN",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF3DE8E)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            // AM / PM Switcher
+                            Column(
+                                modifier = Modifier.padding(bottom = 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Surface(
+                                    color = if (!azanIsPm) Color(0xFFF3DE8E) else Color(0xFF1E293B),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f)),
+                                    modifier = Modifier.clickable { azanIsPm = false }
+                                ) {
+                                    Text(
+                                        text = "AM",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (!azanIsPm) Color(0xFF0F172A) else Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Surface(
+                                    color = if (azanIsPm) Color(0xFFF3DE8E) else Color(0xFF1E293B),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f)),
+                                    modifier = Modifier.clickable { azanIsPm = true }
+                                ) {
+                                    Text(
+                                        text = "PM",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (azanIsPm) Color(0xFF0F172A) else Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(14.dp))
+
+                // 2. JAMMAT TIME SECTION
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131D2E)),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.4f))
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(14.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .background(Color(0xFF86EFAC), CircleShape)
+                                )
+                                Text(
+                                    text = "JAMMAT TIME",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF86EFAC),
+                                    letterSpacing = 0.8.sp
+                                )
+                            }
+                            Text(
+                                text = previewJammat,
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF86EFAC)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(10.dp))
+
+                        // Jammat Hours and Minutes TextFields + AM/PM
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.Center,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            // 1st Text Field: Hours (e.g. 08)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                OutlinedTextField(
+                                    value = jammatHours,
+                                    onValueChange = {
+                                        if (it.length <= 2 && it.all { c -> c.isDigit() }) {
+                                            jammatHours = it
+                                            errorText = ""
+                                        }
+                                    },
+                                    placeholder = { Text("08", fontSize = 18.sp, color = Color.White.copy(alpha = 0.3f), textAlign = TextAlign.Center) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 22.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    ),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFF86EFAC),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                                        focusedContainerColor = Color(0xFF1E293B),
+                                        unfocusedContainerColor = Color(0xFF1E293B)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.width(76.dp)
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "1st: HRS",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF86EFAC)
+                                )
+                            }
+
+                            Text(
+                                text = ":",
+                                fontSize = 26.sp,
+                                fontWeight = FontWeight.Black,
+                                color = Color(0xFF86EFAC),
+                                modifier = Modifier.padding(start = 8.dp, end = 8.dp, bottom = 16.dp)
+                            )
+
+                            // 2nd Text Field: Minutes (e.g. 55)
+                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                OutlinedTextField(
+                                    value = jammatMinutes,
+                                    onValueChange = {
+                                        if (it.length <= 2 && it.all { c -> c.isDigit() }) {
+                                            jammatMinutes = it
+                                            errorText = ""
+                                        }
+                                    },
+                                    placeholder = { Text("55", fontSize = 18.sp, color = Color.White.copy(alpha = 0.3f), textAlign = TextAlign.Center) },
+                                    singleLine = true,
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    textStyle = androidx.compose.ui.text.TextStyle(
+                                        fontSize = 22.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = Color.White,
+                                        textAlign = TextAlign.Center
+                                    ),
+                                    colors = OutlinedTextFieldDefaults.colors(
+                                        focusedTextColor = Color.White,
+                                        unfocusedTextColor = Color.White,
+                                        focusedBorderColor = Color(0xFF86EFAC),
+                                        unfocusedBorderColor = Color.White.copy(alpha = 0.25f),
+                                        focusedContainerColor = Color(0xFF1E293B),
+                                        unfocusedContainerColor = Color(0xFF1E293B)
+                                    ),
+                                    shape = RoundedCornerShape(10.dp),
+                                    modifier = Modifier.width(76.dp)
+                                )
+                                Spacer(modifier = Modifier.height(3.dp))
+                                Text(
+                                    text = "2nd: MIN",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFF86EFAC)
+                                )
+                            }
+
+                            Spacer(modifier = Modifier.width(12.dp))
+
+                            // AM / PM Switcher
+                            Column(
+                                modifier = Modifier.padding(bottom = 14.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Surface(
+                                    color = if (!jammatIsPm) Color(0xFF86EFAC) else Color(0xFF1E293B),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.4f)),
+                                    modifier = Modifier.clickable { jammatIsPm = false }
+                                ) {
+                                    Text(
+                                        text = "AM",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (!jammatIsPm) Color(0xFF0F172A) else Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                                Surface(
+                                    color = if (jammatIsPm) Color(0xFF86EFAC) else Color(0xFF1E293B),
+                                    shape = RoundedCornerShape(6.dp),
+                                    border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.4f)),
+                                    modifier = Modifier.clickable { jammatIsPm = true }
+                                ) {
+                                    Text(
+                                        text = "PM",
+                                        fontSize = 11.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = if (jammatIsPm) Color(0xFF0F172A) else Color.White.copy(alpha = 0.6f),
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
@@ -2500,7 +3246,7 @@ fun EditPrayerTimingDialog(
                     )
                 }
 
-                Spacer(modifier = Modifier.height(22.dp))
+                Spacer(modifier = Modifier.height(20.dp))
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -2510,38 +3256,36 @@ fun EditPrayerTimingDialog(
                         onClick = onDismiss,
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
+                            .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White.copy(alpha = 0.8f)),
                         border = BorderStroke(1.dp, Color.White.copy(alpha = 0.3f))
                     ) {
-                        Text("Cancel", fontSize = 15.sp, fontWeight = FontWeight.SemiBold)
+                        Text("Cancel", fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
                     }
 
                     Button(
                         onClick = {
-                            val validAzan = normalizeInputTime(azanInput)
-                            val validJammat = normalizeInputTime(jammatInput)
                             if (validAzan == null) {
-                                errorText = "Please enter valid Azan time (e.g. 05:40)"
+                                errorText = "Please enter valid Azan hours (01-12) and minutes (00-59)"
                                 return@Button
                             }
                             if (validJammat == null) {
-                                errorText = "Please enter valid Jammat time (e.g. 06:05)"
+                                errorText = "Please enter valid Jammat hours (01-12) and minutes (00-59)"
                                 return@Button
                             }
                             onSave(validAzan, validJammat)
                         },
                         modifier = Modifier
                             .weight(1f)
-                            .height(50.dp),
+                            .height(48.dp),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.secondary,
                             contentColor = Color(0xFF0F172A)
                         )
                     ) {
-                        Text("Save Timings", fontSize = 15.sp, fontWeight = FontWeight.Black)
+                        Text("Save Timings", fontSize = 14.sp, fontWeight = FontWeight.Black)
                     }
                 }
             }

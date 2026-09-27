@@ -10,6 +10,24 @@ data class MasjidTranslation(
 )
 
 val masjidTranslations: Map<String, MasjidTranslation> = mapOf(
+    // Google Sheet Masajid (Solapur)
+    "100111111" to MasjidTranslation(
+        nameUr = "محمدیہ مسجد",
+        nameHi = "मोहम्मदिया मस्जिद",
+        areaUr = "سواگت نگر",
+        areaHi = "स्वागत नगर",
+        cityUr = "سولاپور",
+        cityHi = "सोलापूर"
+    ),
+    "100111112" to MasjidTranslation(
+        nameUr = "حضرت امام حسین مسجد",
+        nameHi = "हज़रत इमाम हुसैन मस्जिद",
+        areaUr = "تائی چوک",
+        areaHi = "ताई चौक",
+        cityUr = "سولاپور",
+        cityHi = "सोलापूर"
+    ),
+
     // Delhi
     "delhi_jama_masjid" to MasjidTranslation(
         nameUr = "جامع مسجد",
