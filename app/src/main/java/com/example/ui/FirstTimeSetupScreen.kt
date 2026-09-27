@@ -1,5 +1,6 @@
 package com.example.ui
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -12,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Search
@@ -41,8 +43,13 @@ fun FirstTimeSetupScreen(
     uiState: UIState,
     onSelectMasjid: (MasjidItem) -> Unit,
     onFinishSetup: (String) -> Unit,
+    onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
+    if (onBack != null) {
+        BackHandler { onBack() }
+    }
+
     var searchQuery by remember { mutableStateOf("") }
     var selectedMasjid by remember(uiState.selectedMasjid) { mutableStateOf(uiState.selectedMasjid) }
 
@@ -179,6 +186,25 @@ fun FirstTimeSetupScreen(
                             color = Color(0xFFF3DE8E)
                         )
                     }
+                }
+            }
+
+            if (onBack != null) {
+                IconButton(
+                    onClick = onBack,
+                    modifier = Modifier
+                        .statusBarsPadding()
+                        .padding(start = 12.dp, top = 8.dp)
+                        .align(Alignment.TopStart)
+                        .background(Color.Black.copy(alpha = 0.6f), CircleShape)
+                        .size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                        contentDescription = "Back",
+                        tint = Color(0xFFF3DE8E),
+                        modifier = Modifier.size(20.dp)
+                    )
                 }
             }
         }

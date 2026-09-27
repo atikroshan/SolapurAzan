@@ -189,6 +189,7 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
     var selectedTab by remember { mutableStateOf("home") } // "record", "home", or "ramazan"
     var showAdminLoginDialog by remember { mutableStateOf(false) }
     var showAdminPanel by remember { mutableStateOf(false) }
+    var showMasjidSelectorScreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(isRamazanActive) {
         if (!isRamazanActive && selectedTab == "ramazan") {
@@ -212,11 +213,15 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
         else -> "Ramazan"
     }
 
-    if (!uiState.isSetupCompleted) {
+    if (!uiState.isSetupCompleted || showMasjidSelectorScreen) {
         FirstTimeSetupScreen(
             uiState = uiState,
             onSelectMasjid = { masjid -> viewModel.selectMasjid(masjid.id) },
-            onFinishSetup = { masjidId -> viewModel.completeSetup(masjidId) }
+            onFinishSetup = { masjidId ->
+                viewModel.completeSetup(masjidId)
+                showMasjidSelectorScreen = false
+            },
+            onBack = if (uiState.isSetupCompleted) { { showMasjidSelectorScreen = false } } else null
         )
     } else if (showAdminPanel) {
         BackHandler { showAdminPanel = false }
@@ -326,7 +331,8 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                         AzanHomeContent(
                             viewModel = viewModel,
                             uiState = uiState,
-                            onOpenAdminLogin = { showAdminLoginDialog = true }
+                            onOpenAdminLogin = { showAdminLoginDialog = true },
+                            onChangeMasjid = { showMasjidSelectorScreen = true }
                         )
                     }
                 }
@@ -351,6 +357,7 @@ fun AzanHomeContent(
     viewModel: AzanViewModel,
     uiState: com.example.ui.UIState,
     onOpenAdminLogin: () -> Unit = {},
+    onChangeMasjid: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -371,7 +378,8 @@ fun AzanHomeContent(
                 allMasajid = uiState.allMasajid,
                 language = uiState.language,
                 onSelectMasjid = { masjid -> viewModel.selectMasjid(masjid.id) },
-                onLanguageSelect = { lang -> viewModel.setLanguage(lang) }
+                onLanguageSelect = { lang -> viewModel.setLanguage(lang) },
+                onChangeClick = onChangeMasjid
             )
 
             // Replaced Header: Time, Gregorian Date & Urdu Date
@@ -408,7 +416,7 @@ fun AzanHomeContent(
         }
 
         Text(
-            text = "v2.3.0 • Powered by @tek",
+            text = "v2.3.1 • Powered by @tek",
             fontSize = 10.sp,
             color = Color.White.copy(alpha = 0.4f),
             modifier = Modifier

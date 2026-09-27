@@ -98,6 +98,7 @@ fun MasjidSelectorDropdown(
     language: String,
     onSelectMasjid: (MasjidItem) -> Unit,
     onLanguageSelect: (String) -> Unit,
+    onChangeClick: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     var showDialog by remember { mutableStateOf(false) }
@@ -106,7 +107,9 @@ fun MasjidSelectorDropdown(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .clickable { showDialog = true },
+            .clickable {
+                if (onChangeClick != null) onChangeClick() else showDialog = true
+            },
         shape = RoundedCornerShape(14.dp),
         colors = CardDefaults.cardColors(containerColor = Color(0xFF111726).copy(alpha = 0.95f)),
         border = BorderStroke(1.dp, Color(0xFFE5A93C).copy(alpha = 0.45f)),
@@ -119,7 +122,7 @@ fun MasjidSelectorDropdown(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.SpaceBetween
         ) {
-            // Left: Mosque Icon + ONLY Masjid Name
+            // Left: Mosque Icon + Masjid Name and Location below it
             Row(
                 modifier = Modifier.weight(1f),
                 verticalAlignment = Alignment.CenterVertically,
@@ -127,7 +130,7 @@ fun MasjidSelectorDropdown(
             ) {
                 Box(
                     modifier = Modifier
-                        .size(36.dp)
+                        .size(38.dp)
                         .background(Color(0xFF1E293B), CircleShape)
                         .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f), CircleShape),
                     contentAlignment = Alignment.Center
@@ -140,16 +143,52 @@ fun MasjidSelectorDropdown(
                     )
                 }
 
-                // ONLY Selected Masjid Name in this line as requested
-                Text(
-                    text = selectedMasjid.getLocalizedName(language),
-                    fontSize = 17.sp,
-                    fontWeight = FontWeight.Black,
-                    color = Color(0xFFF3DE8E),
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.weight(1f)
-                )
+                Column(
+                    modifier = Modifier.weight(1f),
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Text(
+                        text = selectedMasjid.getLocalizedName(language),
+                        fontSize = 16.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color(0xFFF3DE8E),
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+
+                    val locArea = selectedMasjid.getLocalizedArea(language).ifBlank { selectedMasjid.area }
+                    val locCity = selectedMasjid.getLocalizedCity(language).ifBlank { selectedMasjid.city }
+                    val addressText = when {
+                        locArea.isNotBlank() && locCity.isNotBlank() && !locArea.contains(locCity, ignoreCase = true) ->
+                            "$locArea, $locCity"
+                        locArea.isNotBlank() -> locArea
+                        locCity.isNotBlank() -> locCity
+                        else -> ""
+                    }
+
+                    if (addressText.isNotBlank()) {
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(3.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.LocationOn,
+                                contentDescription = "Location",
+                                tint = Color(0xFFE5A93C),
+                                modifier = Modifier.size(12.dp)
+                            )
+                            Text(
+                                text = addressText,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = Color.White.copy(alpha = 0.75f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                    }
+                }
             }
 
             // Right: Change Button in the exact same line
@@ -157,7 +196,9 @@ fun MasjidSelectorDropdown(
                 color = Color(0xFF1E293B),
                 shape = RoundedCornerShape(8.dp),
                 border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f)),
-                modifier = Modifier.clickable { showDialog = true }
+                modifier = Modifier.clickable {
+                    if (onChangeClick != null) onChangeClick() else showDialog = true
+                }
             ) {
                 Row(
                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp),

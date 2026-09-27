@@ -358,7 +358,7 @@ fun TrackerBoardContent(
                                     )
                                 }
 
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(
                                         text = curStrings.points.uppercase(),
                                         fontSize = 11.sp,
@@ -380,6 +380,19 @@ fun TrackerBoardContent(
                                         text = curStrings.ptsPerPrayerSubtitle,
                                         fontSize = 9.5.sp,
                                         color = TextMuted
+                                    )
+                                    Spacer(modifier = Modifier.height(3.dp))
+                                    Text(
+                                        text = when (uiState.language) {
+                                            "ur" -> "تقویٰ پوائنٹس ہر 1 محرم سے شروع ہو کر مکمل سال جاری رہتے ہیں • "
+                                            "hi" -> "सालाना तक़वा अंक हर 1 मुहर्रम से शुरू होकर पूरे साल चलते हैं • "
+                                            else -> "Annual Taqwa points start from every 1st Muharram for the complete year • "
+                                        },
+                                        fontSize = 9.5.sp,
+                                        fontWeight = FontWeight.Medium,
+                                        color = Color(0xFF86EFAC),
+                                        maxLines = 1,
+                                        modifier = Modifier.basicMarquee(iterations = Int.MAX_VALUE)
                                     )
                                 }
                             }
@@ -449,56 +462,6 @@ fun TrackerBoardContent(
                                     fontWeight = FontWeight.Bold
                                 )
                             }
-                        }
-                    }
-                }
-
-                // 1st Muharram Full Year Cycle Banner
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131D32)),
-                    shape = RoundedCornerShape(12.dp),
-                    border = BorderStroke(1.dp, Color(0xFF10B981).copy(alpha = 0.35f))
-                ) {
-                    Row(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 12.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(32.dp)
-                                .background(Color(0xFF166534).copy(alpha = 0.4f), CircleShape)
-                                .border(1.dp, Color(0xFF86EFAC).copy(alpha = 0.5f), CircleShape),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Text(
-                                text = "🌙",
-                                fontSize = 15.sp
-                            )
-                        }
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                text = when (uiState.language) {
-                                    "ur" -> "یکم محرم سے سالانہ تقویٰ سفر ($currentHijriYear ہجری)"
-                                    "hi" -> "1 मुहर्रम से सालाना तक़वा सफ़र ($currentHijriYear हिजरी)"
-                                    else -> "Annual Taqwa Journey from 1st Muharram ($currentHijriYear AH)"
-                                },
-                                fontSize = 11.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF86EFAC)
-                            )
-                            Text(
-                                text = when (uiState.language) {
-                                    "ur" -> "تقویٰ پوائنٹس ہر 1 محرم سے شروع ہو کر مکمل سال جاری رہتے ہیں"
-                                    "hi" -> "तक़वा अंक हर 1 मुहर्रम से शुरू होकर पूरे साल चलते हैं"
-                                    else -> "Taqwa points start every 1st Muharram for the complete year"
-                                },
-                                fontSize = 9.5.sp,
-                                color = TextMuted
-                            )
                         }
                     }
                 }
@@ -618,7 +581,7 @@ fun TrackerBoardContent(
             }
 
             Text(
-                text = "v2.3.0 • Powered by @tek",
+                text = "v2.3.1 • Powered by @tek",
                 fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.4f),
                 modifier = Modifier
@@ -904,7 +867,7 @@ fun StatCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "v2.3.0",
+                    text = "v2.3.1",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFF34D399)
@@ -3089,7 +3052,7 @@ fun RamazanScreenContent(
                 }
 
                 Text(
-                    text = "v2.3.0 • Powered by @tek",
+                    text = "v2.3.1 • Powered by @tek",
                     fontSize = 10.sp,
                     color = Color.White.copy(alpha = 0.4f),
                     modifier = Modifier
