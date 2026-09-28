@@ -23,6 +23,7 @@ import androidx.compose.material.icons.outlined.WbSunny
 import androidx.compose.ui.platform.LocalContext
 import android.widget.Toast
 import com.example.data.AzanTiming
+import com.example.BuildConfig
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -581,7 +582,7 @@ fun TrackerBoardContent(
             }
 
             Text(
-                text = "v2.3.1 • Powered by @tek",
+                text = "v${BuildConfig.VERSION_NAME} • Powered by @tek",
                 fontSize = 10.sp,
                 color = Color.White.copy(alpha = 0.4f),
                 modifier = Modifier
@@ -867,7 +868,7 @@ fun StatCard(
                 contentAlignment = Alignment.Center
             ) {
                 Text(
-                    text = "v2.3.1",
+                    text = "v${BuildConfig.VERSION_NAME}",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = Color(0xFF34D399)
@@ -3052,7 +3053,7 @@ fun RamazanScreenContent(
                 }
 
                 Text(
-                    text = "v2.3.1 • Powered by @tek",
+                    text = "v${BuildConfig.VERSION_NAME} • Powered by @tek",
                     fontSize = 10.sp,
                     color = Color.White.copy(alpha = 0.4f),
                     modifier = Modifier

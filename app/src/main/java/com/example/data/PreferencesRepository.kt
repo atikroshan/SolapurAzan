@@ -18,7 +18,7 @@ class PreferencesRepository(private val context: Context) {
     private val KEY_CACHED_SHEET_CSV = stringPreferencesKey("cached_sheet_csv")
 
     val isSetupCompletedFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
-        prefs[KEY_SETUP_COMPLETED] ?: false
+        prefs[KEY_SETUP_COMPLETED] ?: true
     }
 
     suspend fun setSetupCompleted(completed: Boolean) {

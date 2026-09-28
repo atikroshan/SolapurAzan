@@ -29,7 +29,10 @@ data class MasjidItem(
     val maghribJammatFixed: String? = null,
     val ishaAzanFixed: String? = null,
     val ishaJammatFixed: String? = null
-)
+) {
+    val address: String
+        get() = listOf(area, city, state).filter { it.isNotBlank() }.joinToString(", ")
+}
 
 fun adjustTime(time24: String, offsetMinutes: Int): String {
     if (!time24.contains(":")) return time24
