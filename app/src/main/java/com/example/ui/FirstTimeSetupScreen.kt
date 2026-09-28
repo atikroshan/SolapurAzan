@@ -10,8 +10,10 @@ import android.widget.Toast
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.BorderStroke
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -19,6 +21,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,30 +30,35 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.outlined.Badge
-import androidx.compose.material.icons.outlined.LocationOn
 import androidx.compose.material.icons.outlined.Mosque
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
+import coil.compose.AsyncImage
+import coil.request.ImageRequest
 import com.example.R
 import com.example.data.MasjidItem
 import com.example.data.getLocalizedArea
 import com.example.data.getLocalizedName
 import java.util.Locale
+
+private const val KAABA_BG_URL =
+    "https://lh3.googleusercontent.com/aida-public/AB6AXuD6TYjWkZp6_LZHKswlMMD5vxC39ZbF05d_QgMWEV4PRTOct-gagp5BbUxOkxr_ZBGaQHh6euej1VX0n4cVVyyOqqTlqomtxXllJFFdTZ7znUB8T5crJmB6-grdLEQv-HGnBD469f1KaBnqXuvBSjJQtKSXejQWH_XdTYRkO-mQIC9eFYH0d4do--51pjlVSp7Yaynw4seWDkd8Q4ry2IdE8n07gt-Gfvfqs7rnjR2ne0hyPomXh6yAuA"
 
 @Composable
 fun FirstTimeSetupScreen(
@@ -60,15 +68,30 @@ fun FirstTimeSetupScreen(
     onBack: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
-    if (onBack != null) {
-        BackHandler { onBack() }
+    val context = LocalContext.current
+    val isChangeMode = onBack != null
+
+    var searchQuery by remember { mutableStateOf("") }
+    var isSearchFocused by remember { mutableStateOf(false) }
+
+    // In Change mode: start with currently set masjid.
+    // In First-Time setup: do NOT auto-select any masjid until user actually searches and clicks one!
+    var userSelectedMasjid by remember(uiState.selectedMasjid, isChangeMode) {
+        mutableStateOf(if (isChangeMode) uiState.selectedMasjid else null)
     }
 
-    val context = LocalContext.current
-    var searchQuery by remember { mutableStateOf("") }
-    var selectedMasjid by remember(uiState.selectedMasjid) { mutableStateOf(uiState.selectedMasjid) }
+    val hasQuery = searchQuery.trim().isNotBlank()
+    // Show photo card only when a masjid is actually chosen by the user (or in change mode)
+    val showMasjidCard = userSelectedMasjid != null
 
-    val isSearchActive = searchQuery.trim().isNotBlank()
+    // Back handling
+    BackHandler {
+        if (hasQuery) {
+            searchQuery = ""
+        } else if (onBack != null) {
+            onBack()
+        }
+    }
 
     // Speech to text activity launcher
     val speechLauncher = rememberLauncherForActivityResult(
@@ -79,6 +102,7 @@ fun FirstTimeSetupScreen(
             val spokenText = spokenTextList?.firstOrNull()?.trim()
             if (!spokenText.isNullOrBlank()) {
                 searchQuery = spokenText
+                isSearchFocused = true
             }
         }
     }
@@ -110,12 +134,12 @@ fun FirstTimeSetupScreen(
         }
     }
 
-    // Filter masajid only when search is active; empty when search is empty
-    val matchedList = remember(searchQuery, uiState.allMasajid, uiState.language) {
-        val q = searchQuery.trim().lowercase()
-        if (q.isEmpty()) {
+    // Matching masajid list (only shown when user types search text)
+    val matchedList = remember(searchQuery, uiState.allMasajid, uiState.language, hasQuery) {
+        if (!hasQuery) {
             emptyList()
         } else {
+            val q = searchQuery.trim().lowercase()
             uiState.allMasajid.filter { m ->
                 m.name.lowercase().contains(q) ||
                 m.area.lowercase().contains(q) ||
@@ -128,540 +152,727 @@ fun FirstTimeSetupScreen(
         }
     }
 
-    Column(
+    Box(
         modifier = modifier
             .fillMaxSize()
-            .background(Color(0xFFF8FAFC))
-            .statusBarsPadding()
-            .navigationBarsPadding()
+            .background(Color(0xFF0A0F14))
     ) {
-        // Scrollable content so on any screen size it looks balanced and accessible
-        Column(
-            modifier = Modifier
-                .fillMaxSize()
-                .verticalScroll(rememberScrollState())
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
-            // Optional Back button if navigated from settings
-            if (onBack != null) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.Start
-                ) {
-                    IconButton(
-                        onClick = onBack,
-                        modifier = Modifier
-                            .background(Color.White, CircleShape)
-                            .border(1.dp, Color(0xFFE2E8F0), CircleShape)
-                            .size(38.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                            contentDescription = "Back",
-                            tint = Color(0xFF0F172A),
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
-                Spacer(modifier = Modifier.height(8.dp))
-            }
-
-            // 1. MAKKA IMAGE IN LIGHT BACKGROUND
-            Card(
-                shape = RoundedCornerShape(20.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
-                border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                colors = CardDefaults.cardColors(containerColor = Color.White),
+        // 1. FULL-BLEED KAABA ATMOSPHERIC BACKGROUND (SHOWN ON START PAGE WHEN NO MASJID CARD IS ACTIVE)
+        if (!showMasjidCard) {
+            AsyncImage(
+                model = ImageRequest.Builder(context)
+                    .data(KAABA_BG_URL)
+                    .error(R.drawable.img_makkah_light)
+                    .placeholder(R.drawable.img_makkah_light)
+                    .crossfade(true)
+                    .build(),
+                contentDescription = "Majestic Masjid al-Haram & Holy Kaaba",
+                contentScale = ContentScale.Crop,
                 modifier = Modifier
-                    .fillMaxWidth()
-                    .height(210.dp)
-            ) {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(
-                            Brush.verticalGradient(
-                                listOf(Color(0xFFFFFFFF), Color(0xFFF1F5F9))
-                            )
-                        )
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.img_makkah_light),
-                        contentDescription = "Holy Kaaba, Makkah",
-                        contentScale = ContentScale.Crop,
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clip(RoundedCornerShape(20.dp))
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(14.dp))
-
-            // 2. ASSALAMU'ALAIKUM IN ARABIC, ENGLISH, HINDI ONE BELOW ANOTHER
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                verticalArrangement = Arrangement.spacedBy(3.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                // Arabic
-                Text(
-                    text = "اَلسَّلَامُ عَلَيْكُمْ",
-                    fontSize = 24.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = Color(0xFF047857), // Deep Islamic emerald green
-                    textAlign = TextAlign.Center
-                )
-                // English
-                Text(
-                    text = "Assalamu 'Alaikum",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF1E293B), // Charcoal slate
-                    textAlign = TextAlign.Center
-                )
-                // Hindi
-                Text(
-                    text = "अस्सलामु अलैकुम",
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
-                    color = Color(0xFF334155),
-                    textAlign = TextAlign.Center
-                )
-
-                Spacer(modifier = Modifier.height(6.dp))
-
-                // 3. USKE NICHE "Welcome to"
-                Text(
-                    text = "Welcome to",
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Medium,
-                    letterSpacing = 1.2.sp,
-                    color = Color(0xFF64748B), // Subtle slate
-                    textAlign = TextAlign.Center
-                )
-
-                // 4. USKE NICHE BOLD AUR BIG FONT MAI "AZAN TIME"
-                Text(
-                    text = "AZAN TIME",
-                    fontSize = 32.sp,
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.8.sp,
-                    color = Color(0xFF065F46), // Rich dark emerald
-                    textAlign = TextAlign.Center
-                )
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            // 5. SEARCH BAR (LEFT MAI MIC SPEAK TO TEXT, RIGHT MAI SEARCH ICON)
-            OutlinedTextField(
-                value = searchQuery,
-                onValueChange = { searchQuery = it },
-                placeholder = {
-                    Text(
-                        text = "Search Masjid Name, Address or ID...",
-                        fontSize = 13.sp,
-                        color = Color(0xFF94A3B8)
-                    )
-                },
-                leadingIcon = {
-                    IconButton(
-                        onClick = { startVoiceInput() },
-                        modifier = Modifier.size(42.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Speak to text",
-                            tint = Color(0xFF059669), // Green mic
-                            modifier = Modifier.size(24.dp)
-                        )
-                    }
-                },
-                trailingIcon = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.padding(end = 4.dp)
-                    ) {
-                        if (searchQuery.isNotEmpty()) {
-                            IconButton(
-                                onClick = { searchQuery = "" },
-                                modifier = Modifier.size(36.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Close,
-                                    contentDescription = "Clear",
-                                    tint = Color(0xFF64748B),
-                                    modifier = Modifier.size(18.dp)
-                                )
-                            }
-                        }
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = Color(0xFF059669),
-                            modifier = Modifier
-                                .size(24.dp)
-                                .padding(end = 6.dp)
-                        )
-                    }
-                },
-                singleLine = true,
-                shape = RoundedCornerShape(16.dp),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedTextColor = Color(0xFF0F172A),
-                    unfocusedTextColor = Color(0xFF0F172A),
-                    focusedBorderColor = Color(0xFF059669),
-                    unfocusedBorderColor = Color(0xFFCBD5E1),
-                    focusedContainerColor = Color.White,
-                    unfocusedContainerColor = Color.White
-                ),
-                modifier = Modifier
-                    .fillMaxWidth()
+                    .fillMaxSize()
+                    .scale(1.02f)
             )
 
-            // DATA BELOW SEARCH: STRICTLY ONLY SHOWN WHEN SEARCH QUERY IS NOT EMPTY
-            if (isSearchActive) {
-                Spacer(modifier = Modifier.height(14.dp))
+            // High-grade atmospheric gradient overlay
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(
+                        Brush.verticalGradient(
+                            listOf(
+                                Color(0xFF0A0F14).copy(alpha = 0.88f),
+                                Color(0xFF0A0F14).copy(alpha = 0.72f),
+                                Color(0xFF0A0F14).copy(alpha = 0.94f)
+                            )
+                        )
+                    )
+            )
+        }
 
-                if (matchedList.isEmpty()) {
-                    // No match found
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(14.dp),
-                        border = BorderStroke(1.dp, Color(0xFFE2E8F0)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(18.dp),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Outlined.Mosque,
-                                contentDescription = null,
-                                tint = Color(0xFF94A3B8),
-                                modifier = Modifier.size(32.dp)
-                            )
-                            Text(
-                                text = "No masjid found for \"${searchQuery.trim()}\"",
-                                fontSize = 13.5.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = Color(0xFF1E293B),
-                                textAlign = TextAlign.Center
-                            )
-                            Text(
-                                text = "Search by Masjid Name, Area, City, or ID",
-                                fontSize = 11.5.sp,
-                                color = Color(0xFF64748B),
-                                textAlign = TextAlign.Center
-                            )
-                        }
+        // Top Back Button (Only in Change mode or when masjid card is shown in first-time)
+        if (onBack != null || (showMasjidCard && !isChangeMode)) {
+            IconButton(
+                onClick = {
+                    if (hasQuery) {
+                        searchQuery = ""
+                    } else if (!isChangeMode) {
+                        // Reset preview back to start page
+                        userSelectedMasjid = null
+                    } else if (onBack != null) {
+                        onBack()
                     }
-                } else {
-                    // Matching masajid list header
-                    Row(
+                },
+                modifier = Modifier
+                    .statusBarsPadding()
+                    .padding(start = 16.dp, top = 12.dp)
+                    .size(42.dp)
+                    .background(Color(0xFF0A0F14).copy(alpha = 0.85f), CircleShape)
+                    .border(1.dp, Color(0xFFF2CA50).copy(alpha = 0.40f), CircleShape)
+            ) {
+                Icon(
+                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                    contentDescription = "Back",
+                    tint = Color(0xFFF2CA50),
+                    modifier = Modifier.size(22.dp)
+                )
+            }
+        }
+
+        // SCROLLABLE CONTAINER
+        BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+            val screenHeight = maxHeight
+            val photoHeight = if (hasQuery && matchedList.isNotEmpty()) {
+                (screenHeight * 0.28f).coerceIn(180.dp, 230.dp)
+            } else {
+                (screenHeight - 210.dp).coerceIn(320.dp, 560.dp)
+            }
+
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .verticalScroll(rememberScrollState())
+                    .statusBarsPadding()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 20.dp, vertical = 12.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                if (showMasjidCard && userSelectedMasjid != null) {
+                    val activeMasjid = userSelectedMasjid!!
+
+                    // Top spacing for back button
+                    Spacer(modifier = Modifier.height(46.dp))
+
+                    // 1. LARGE SELECTED MASJID PHOTO CARD (Fills down to search & finish)
+                    Card(
+                        shape = RoundedCornerShape(22.dp),
+                        border = BorderStroke(1.dp, Color(0xFFF2CA50).copy(alpha = 0.35f)),
+                        colors = CardDefaults.cardColors(containerColor = Color(0xFF0F151C)),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 6.dp),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .padding(vertical = 4.dp),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                            .height(photoHeight)
                     ) {
-                        Text(
-                            text = "MATCHING MASAJID (${matchedList.size})",
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = Color(0xFF047857),
-                            letterSpacing = 0.8.sp
-                        )
-                        Text(
-                            text = "Tap to select",
-                            fontSize = 11.sp,
-                            color = Color(0xFF64748B)
-                        )
-                    }
+                        Box(modifier = Modifier.fillMaxSize()) {
+                            if (activeMasjid.photoUrl.isNotBlank()) {
+                                AsyncImage(
+                                    model = ImageRequest.Builder(context)
+                                        .data(activeMasjid.photoUrl)
+                                        .crossfade(true)
+                                        .build(),
+                                    contentDescription = activeMasjid.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier.fillMaxSize()
+                                )
+                            } else {
+                                // Clean blank dark surface if no photo is available
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(Color(0xFF0F151C))
+                                )
+                            }
 
-                    // Matching list cards
-                    matchedList.forEach { item ->
-                        val isSel = item.id == selectedMasjid.id
-                        Card(
-                            onClick = {
-                                selectedMasjid = item
-                                onSelectMasjid(item)
-                            },
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSel) Color(0xFFECFDF5) else Color.White
-                            ),
-                            shape = RoundedCornerShape(12.dp),
-                            border = BorderStroke(
-                                1.5.dp,
-                                if (isSel) Color(0xFF10B981) else Color(0xFFE2E8F0)
-                            ),
-                            elevation = CardDefaults.cardElevation(defaultElevation = if (isSel) 2.dp else 1.dp),
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(vertical = 4.dp)
-                        ) {
-                            Row(
+                            // Dark Gradient Overlay at bottom of photo with Name, Location & ID badge
+                            Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .padding(12.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    .align(Alignment.BottomCenter)
+                                    .background(
+                                        Brush.verticalGradient(
+                                            listOf(
+                                                Color.Transparent,
+                                                Color(0xFF0A0F14).copy(alpha = 0.95f)
+                                            )
+                                        )
+                                    )
+                                    .padding(horizontal = 16.dp, vertical = 12.dp)
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(38.dp)
-                                        .background(
-                                            if (isSel) Color(0xFFD1FAE5) else Color(0xFFF1F5F9),
-                                            CircleShape
-                                        ),
-                                    contentAlignment = Alignment.Center
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    verticalAlignment = Alignment.Bottom,
+                                    horizontalArrangement = Arrangement.SpaceBetween
                                 ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Mosque,
-                                        contentDescription = null,
-                                        tint = if (isSel) Color(0xFF059669) else Color(0xFF64748B),
-                                        modifier = Modifier.size(20.dp)
-                                    )
-                                }
-
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = item.getLocalizedName(uiState.language),
-                                        fontSize = 14.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSel) Color(0xFF065F46) else Color(0xFF0F172A)
-                                    )
-                                    val itemLoc = listOf(
-                                        item.getLocalizedArea(uiState.language),
-                                        item.city,
-                                        item.state
-                                    ).filter { it.isNotBlank() }.joinToString(", ")
-                                    if (itemLoc.isNotBlank()) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(3.dp)
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.Place,
-                                                contentDescription = null,
-                                                tint = Color(0xFF0284C7),
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Text(
-                                                text = itemLoc,
-                                                fontSize = 11.5.sp,
-                                                color = Color(0xFF475569),
-                                                maxLines = 1,
-                                                overflow = TextOverflow.Ellipsis
-                                            )
+                                    Column(modifier = Modifier.weight(1f, fill = false)) {
+                                        Text(
+                                            text = activeMasjid.getLocalizedName(uiState.language),
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFF2CA50),
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        val displayLoc = listOf(
+                                            activeMasjid.getLocalizedArea(uiState.language),
+                                            activeMasjid.city,
+                                            activeMasjid.state
+                                        ).filter { it.isNotBlank() }.joinToString(", ")
+                                        if (displayLoc.isNotBlank()) {
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Place,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF38BDF8),
+                                                    modifier = Modifier.size(13.dp)
+                                                )
+                                                Text(
+                                                    text = displayLoc,
+                                                    fontSize = 12.sp,
+                                                    color = Color.White.copy(alpha = 0.85f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
                                         }
                                     }
-                                }
 
-                                Box(
-                                    modifier = Modifier
-                                        .background(
-                                            if (isSel) Color(0xFFD1FAE5) else Color(0xFFF1F5F9),
-                                            RoundedCornerShape(6.dp)
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                Color(0xFF1E2836).copy(alpha = 0.85f),
+                                                RoundedCornerShape(6.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                Color(0xFFF2CA50).copy(alpha = 0.4f),
+                                                RoundedCornerShape(6.dp)
+                                            )
+                                            .padding(horizontal = 8.dp, vertical = 3.dp)
+                                    ) {
+                                        Text(
+                                            text = "#${activeMasjid.id}",
+                                            fontSize = 11.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFF2CA50)
                                         )
-                                        .border(
-                                            1.dp,
-                                            if (isSel) Color(0xFF10B981).copy(alpha = 0.5f) else Color(0xFFCBD5E1),
-                                            RoundedCornerShape(6.dp)
-                                        )
-                                        .padding(horizontal = 8.dp, vertical = 3.dp)
-                                ) {
-                                    Text(
-                                        text = "#${item.id}",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = if (isSel) Color(0xFF047857) else Color(0xFF475569)
-                                    )
-                                }
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(10.dp))
-
-                    // Selected Masjid Details Card (Name, Address, ID)
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = Color.White),
-                        shape = RoundedCornerShape(16.dp),
-                        border = BorderStroke(1.dp, Color(0xFFCBD5E1)),
-                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-                    ) {
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .padding(14.dp),
-                            verticalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // Field 1: Masjid Name
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .background(Color(0xFFECFDF5), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Mosque,
-                                        contentDescription = null,
-                                        tint = Color(0xFF059669),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "MASJID NAME",
-                                        fontSize = 9.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF047857),
-                                        letterSpacing = 0.8.sp
-                                    )
-                                    Text(
-                                        text = selectedMasjid.getLocalizedName(uiState.language),
-                                        fontSize = 14.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF0F172A),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider(color = Color(0xFFF1F5F9))
-
-                            // Field 2: Address
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .background(Color(0xFFF0F9FF), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.LocationOn,
-                                        contentDescription = null,
-                                        tint = Color(0xFF0284C7),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "LOCATION / ADDRESS",
-                                        fontSize = 9.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF0284C7),
-                                        letterSpacing = 0.8.sp
-                                    )
-                                    val addr = listOf(
-                                        selectedMasjid.getLocalizedArea(uiState.language),
-                                        selectedMasjid.city,
-                                        selectedMasjid.state
-                                    ).filter { it.isNotBlank() }.joinToString(", ")
-                                    Text(
-                                        text = if (addr.isNotBlank()) addr else (selectedMasjid.address.ifBlank { "Not specified" }),
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.SemiBold,
-                                        color = Color(0xFF334155),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                }
-                            }
-
-                            HorizontalDivider(color = Color(0xFFF1F5F9))
-
-                            // Field 3: Masjid ID
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(34.dp)
-                                        .background(Color(0xFFFEF3C7), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Badge,
-                                        contentDescription = null,
-                                        tint = Color(0xFFD97706),
-                                        modifier = Modifier.size(18.dp)
-                                    )
-                                }
-                                Column(modifier = Modifier.weight(1f)) {
-                                    Text(
-                                        text = "MASJID ID",
-                                        fontSize = 9.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFD97706),
-                                        letterSpacing = 0.8.sp
-                                    )
-                                    Text(
-                                        text = selectedMasjid.id,
-                                        fontSize = 13.5.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF0F172A)
-                                    )
+                                    }
                                 }
                             }
                         }
                     }
 
                     Spacer(modifier = Modifier.height(14.dp))
+                } else {
+                    // PROFESSIONAL START PAGE UI (SHOWN WHEN NO MASJID SELECTED YET)
+                    Spacer(modifier = Modifier.height(maxOf(20.dp, screenHeight * 0.06f)))
 
-                    // Green FINISH Button
-                    Button(
-                        onClick = { onFinishSetup(selectedMasjid.id) },
-                        colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF16A34A),
-                            contentColor = Color.White
-                        ),
-                        shape = RoundedCornerShape(14.dp),
-                        elevation = ButtonDefaults.buttonElevation(defaultElevation = 3.dp),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp)
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        // Top Pill Badge
+                        Surface(
+                            color = Color(0xFF141F29).copy(alpha = 0.85f),
+                            shape = RoundedCornerShape(24.dp),
+                            border = BorderStroke(1.dp, Color(0xFFD4AF37).copy(alpha = 0.40f)),
+                            modifier = Modifier.padding(bottom = 14.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Mosque,
+                                    contentDescription = null,
+                                    tint = Color(0xFFF2CA50),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                                Text(
+                                    text = "OFFLINE AZAN & JAMA'AT",
+                                    fontSize = 10.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color(0xFFF2CA50),
+                                    letterSpacing = 1.1.sp
+                                )
+                            }
+                        }
+
+                        // 1. Arabic Greeting
+                        Text(
+                            text = "السَّلَامُ عَلَيْكُمْ وَرَحْمَةُ ٱللَّهِ وَبَرَكَاتُهُ",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color(0xFFE5C158),
+                            textAlign = TextAlign.Center,
+                            lineHeight = 28.sp
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // 2. English Greeting
+                        Text(
+                            text = "Assalamu Alaikum",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color.White,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        // 3. Hindi Greeting
+                        Text(
+                            text = "अस्सलाम वालेकुम",
+                            fontSize = 20.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFFD5DDE5),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(18.dp))
+
+                        Text(
+                            text = "Welcome to",
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium,
+                            color = Color(0xFFE1C561).copy(alpha = 0.90f),
+                            letterSpacing = 1.5.sp,
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(2.dp))
+
+                        Text(
+                            text = "AZAN TIME",
+                            fontSize = 36.sp,
+                            fontWeight = FontWeight.Black,
+                            letterSpacing = 2.5.sp,
+                            style = TextStyle(
+                                brush = Brush.horizontalGradient(
+                                    listOf(
+                                        Color(0xFFFFF6D3),
+                                        Color(0xFFF2CA50),
+                                        Color(0xFFD4AF37)
+                                    )
+                                )
+                            ),
+                            textAlign = TextAlign.Center
+                        )
+
+                        Spacer(modifier = Modifier.height(6.dp))
+
+                        Text(
+                            text = "Find and select your local Masjid to get started",
+                            fontSize = 12.5.sp,
+                            color = Color(0xFF94A3B8),
+                            textAlign = TextAlign.Center
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.height(22.dp))
+                }
+
+                // 2. SEARCH BAR
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(54.dp)
+                        .background(
+                            Color(0xFF0F172A).copy(alpha = 0.90f),
+                            RoundedCornerShape(18.dp)
+                        )
+                        .border(
+                            1.dp,
+                            Color(0xFFF2CA50).copy(alpha = 0.45f),
+                            RoundedCornerShape(18.dp)
+                        )
+                        .clickable { isSearchFocused = true }
+                        .padding(horizontal = 8.dp),
+                    contentAlignment = Alignment.CenterStart
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Search,
+                            contentDescription = "Search",
+                            tint = Color(0xFFF2CA50),
+                            modifier = Modifier
+                                .padding(start = 8.dp, end = 10.dp)
+                                .size(22.dp)
+                        )
+
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .padding(vertical = 4.dp),
+                            contentAlignment = Alignment.CenterStart
+                        ) {
+                            if (searchQuery.isEmpty()) {
+                                Text(
+                                    text = "Search Masjid Name, Area or ID...",
+                                    color = Color(0xFF94A3B8).copy(alpha = 0.75f),
+                                    fontSize = 14.sp
+                                )
+                            }
+                            BasicTextField(
+                                value = searchQuery,
+                                onValueChange = {
+                                    searchQuery = it
+                                    isSearchFocused = true
+                                },
+                                textStyle = TextStyle(
+                                    color = Color.White,
+                                    fontSize = 14.5.sp,
+                                    fontWeight = FontWeight.Normal
+                                ),
+                                singleLine = true,
+                                cursorBrush = SolidColor(Color(0xFFF2CA50)),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .onFocusChanged {
+                                        if (it.isFocused) {
+                                            isSearchFocused = true
+                                        }
+                                    }
+                            )
+                        }
+
+                        if (searchQuery.isNotEmpty()) {
+                            IconButton(
+                                onClick = { searchQuery = "" },
+                                modifier = Modifier.size(34.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear",
+                                    tint = Color(0xFFD0C5AF).copy(alpha = 0.75f),
+                                    modifier = Modifier.size(18.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(4.dp))
+                        }
+
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(
+                                    Color(0xFFF2CA50).copy(alpha = 0.15f),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .border(
+                                    1.dp,
+                                    Color(0xFFF2CA50).copy(alpha = 0.35f),
+                                    RoundedCornerShape(12.dp)
+                                )
+                                .clickable {
+                                    isSearchFocused = true
+                                    startVoiceInput()
+                                },
+                            contentAlignment = Alignment.Center
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Check,
-                                contentDescription = "Finish",
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
-                            Text(
-                                text = "FINISH",
-                                fontSize = 16.sp,
-                                fontWeight = FontWeight.Black,
-                                letterSpacing = 1.sp
+                                imageVector = Icons.Default.Mic,
+                                contentDescription = "Voice search",
+                                tint = Color(0xFFF2CA50),
+                                modifier = Modifier.size(19.dp)
                             )
                         }
                     }
+                }
 
-                    Spacer(modifier = Modifier.height(16.dp))
+                // Quick Hint under Search Bar when empty on Start Page
+                if (!showMasjidCard && !hasQuery) {
+                    Spacer(modifier = Modifier.height(14.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = Color(0xFF1E2836).copy(alpha = 0.60f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(0.8.dp, Color(0xFFF2CA50).copy(alpha = 0.20f))
+                        ) {
+                            Text(
+                                text = "🔍 By Name",
+                                fontSize = 11.sp,
+                                color = Color(0xFFE2E8F0),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                        Surface(
+                            color = Color(0xFF1E2836).copy(alpha = 0.60f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(0.8.dp, Color(0xFFF2CA50).copy(alpha = 0.20f))
+                        ) {
+                            Text(
+                                text = "📍 By Area",
+                                fontSize = 11.sp,
+                                color = Color(0xFFE2E8F0),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                        Surface(
+                            color = Color(0xFF1E2836).copy(alpha = 0.60f),
+                            shape = RoundedCornerShape(12.dp),
+                            border = BorderStroke(0.8.dp, Color(0xFFF2CA50).copy(alpha = 0.20f))
+                        ) {
+                            Text(
+                                text = "🔢 By ID",
+                                fontSize = 11.sp,
+                                color = Color(0xFFE2E8F0),
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+                    }
+                }
+
+                // 3. SEARCH RESULTS LIST (SHOWN ONLY WHEN USER TYPES IN SEARCH BOX)
+                if (hasQuery) {
+                    Spacer(modifier = Modifier.height(14.dp))
+
+                    if (matchedList.isEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(
+                                containerColor = Color(0xFF0F172A).copy(alpha = 0.90f)
+                            ),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, Color(0xFFF2CA50).copy(alpha = 0.25f))
+                        ) {
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(16.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Outlined.Mosque,
+                                    contentDescription = null,
+                                    tint = Color(0xFFF2CA50).copy(alpha = 0.65f),
+                                    modifier = Modifier.size(28.dp)
+                                )
+                                Text(
+                                    text = "No masjid found for \"${searchQuery.trim()}\"",
+                                    fontSize = 13.5.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White,
+                                    textAlign = TextAlign.Center
+                                )
+                                Text(
+                                    text = "Try searching by Area name or 9-digit Masjid ID",
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFF94A3B8),
+                                    textAlign = TextAlign.Center
+                                )
+                            }
+                        }
+                    } else {
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(horizontal = 4.dp, vertical = 4.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                text = "MATCHING MASAJID (${matchedList.size})",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFFF2CA50),
+                                letterSpacing = 0.8.sp
+                            )
+                            Text(
+                                text = "Tap to select",
+                                fontSize = 11.sp,
+                                color = Color(0xFF94A3B8)
+                            )
+                        }
+
+                        matchedList.forEach { item ->
+                            val isSel = item.id == userSelectedMasjid?.id
+                            Card(
+                                onClick = {
+                                    // When user explicitly taps a masjid, select it and update preview card
+                                    userSelectedMasjid = item
+                                },
+                                colors = CardDefaults.cardColors(
+                                    containerColor = if (isSel) {
+                                        Color(0xFF14291E).copy(alpha = 0.95f)
+                                    } else {
+                                        Color(0xFF0F151C).copy(alpha = 0.85f)
+                                    }
+                                ),
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (isSel) Color(0xFF22C55E) else Color(0xFFF2CA50).copy(alpha = 0.25f)
+                                ),
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 3.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(36.dp)
+                                            .background(
+                                                if (isSel) Color(0xFF166534) else Color(0xFF1E2836).copy(alpha = 0.6f),
+                                                CircleShape
+                                            ),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Outlined.Mosque,
+                                            contentDescription = null,
+                                            tint = if (isSel) Color(0xFF86EFAC) else Color(0xFFF2CA50),
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = item.getLocalizedName(uiState.language),
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (isSel) Color(0xFF86EFAC) else Color.White
+                                        )
+                                        val itemLoc = listOf(
+                                            item.getLocalizedArea(uiState.language),
+                                            item.city,
+                                            item.state
+                                        ).filter { it.isNotBlank() }.joinToString(", ")
+                                        if (itemLoc.isNotBlank()) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Place,
+                                                    contentDescription = null,
+                                                    tint = Color(0xFF38BDF8),
+                                                    modifier = Modifier.size(12.dp)
+                                                )
+                                                Text(
+                                                    text = itemLoc,
+                                                    fontSize = 11.5.sp,
+                                                    color = Color(0xFFD0C5AF).copy(alpha = 0.85f),
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+
+                                    Box(
+                                        modifier = Modifier
+                                            .background(
+                                                Color(0xFF1E2836).copy(alpha = 0.8f),
+                                                RoundedCornerShape(6.dp)
+                                            )
+                                            .border(
+                                                1.dp,
+                                                Color(0xFFF2CA50).copy(alpha = 0.35f),
+                                                RoundedCornerShape(6.dp)
+                                            )
+                                            .padding(horizontal = 7.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "#${item.id}",
+                                            fontSize = 10.5.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color(0xFFF2CA50)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // 4. ACTION BUTTONS: BALANCED, NON-GARISH, CLEAN STYLING
+                if (showMasjidCard && userSelectedMasjid != null) {
+                    val activeMasjid = userSelectedMasjid!!
+                    val hasSelectionChanged = activeMasjid.id != uiState.selectedMasjid.id
+
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(bottom = 12.dp),
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        // CANCEL BUTTON (Available in change mode or when previewing in first-time)
+                        if (isChangeMode) {
+                            OutlinedButton(
+                                onClick = { onBack?.invoke() },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(50.dp),
+                                shape = RoundedCornerShape(14.dp),
+                                border = BorderStroke(1.dp, Color(0xFF475569)),
+                                colors = ButtonDefaults.outlinedButtonColors(
+                                    containerColor = Color(0xFF1E293B).copy(alpha = 0.60f),
+                                    contentColor = Color(0xFFCBD5E1)
+                                )
+                            ) {
+                                Text(
+                                    text = "CANCEL",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    letterSpacing = 0.8.sp
+                                )
+                            }
+                        }
+
+                        // FINISH BUTTON
+                        // In Change Mode: if no new masjid was selected, FINISH is subtly styled / non-highlighted.
+                        // When a new masjid IS selected, FINISH becomes active golden to confirm the new choice!
+                        val isFinishEnabled = !isChangeMode || hasSelectionChanged
+
+                        Button(
+                            onClick = {
+                                onSelectMasjid(activeMasjid)
+                                onFinishSetup(activeMasjid.id)
+                            },
+                            enabled = isFinishEnabled,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isFinishEnabled) Color(0xFFF2CA50) else Color(0xFF1E2836).copy(alpha = 0.50f),
+                                contentColor = if (isFinishEnabled) Color(0xFF241A00) else Color(0xFF64748B),
+                                disabledContainerColor = Color(0xFF1E2836).copy(alpha = 0.50f),
+                                disabledContentColor = Color(0xFF64748B)
+                            ),
+                            shape = RoundedCornerShape(14.dp),
+                            elevation = if (isFinishEnabled) ButtonDefaults.buttonElevation(defaultElevation = 4.dp) else ButtonDefaults.buttonElevation(defaultElevation = 0.dp),
+                            modifier = Modifier
+                                .weight(if (isChangeMode) 1.25f else 1f)
+                                .height(50.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Check,
+                                    contentDescription = "Finish",
+                                    tint = if (isFinishEnabled) Color(0xFF241A00) else Color(0xFF64748B),
+                                    modifier = Modifier.size(19.dp)
+                                )
+                                Text(
+                                    text = "FINISH",
+                                    fontSize = 15.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                            }
+                        }
+                    }
                 }
             }
         }
