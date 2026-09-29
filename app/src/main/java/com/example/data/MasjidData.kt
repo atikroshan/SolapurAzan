@@ -28,7 +28,9 @@ data class MasjidItem(
     val maghribAzanFixed: String? = null,
     val maghribJammatFixed: String? = null,
     val ishaAzanFixed: String? = null,
-    val ishaJammatFixed: String? = null
+    val ishaJammatFixed: String? = null,
+    val adminId: String = "admin",
+    val adminPassword: String = "9960171516"
 ) {
     val address: String
         get() = listOf(area, city, state).filter { it.isNotBlank() }.joinToString(", ")
@@ -102,7 +104,9 @@ object MasjidRepository {
         maghribAzanFixed = "18:11",
         maghribJammatFixed = "18:13",
         ishaAzanFixed = "19:55",
-        ishaJammatFixed = "20:05"
+        ishaJammatFixed = "20:05",
+        adminId = "admin",
+        adminPassword = "9970595659"
     )
 
     fun getAllMasajid(): List<MasjidItem> {

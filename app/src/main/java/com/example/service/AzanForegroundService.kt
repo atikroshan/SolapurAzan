@@ -32,10 +32,31 @@ class AzanForegroundService : Service() {
     }
 
     companion object {
+        var serviceInstance: AzanForegroundService? = null
         val isPlayingAzan = MutableStateFlow(false)
         val currentPlayingPrayerName = MutableStateFlow<String?>(null)
         val lastAudioFinishedTime = MutableStateFlow(0L)
         val lastAudioPrayerIndex = MutableStateFlow(-1)
+
+        fun stopService(context: Context) {
+            try {
+                serviceInstance?.stopAzanAudio()
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+            try {
+                val stopIntent = Intent(context, AzanForegroundService::class.java).apply {
+                    action = "STOP_AZAN"
+                }
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    context.startForegroundService(stopIntent)
+                } else {
+                    context.startService(stopIntent)
+                }
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
 
         fun prayerNameToIndex(name: String?): Int {
             return when (name?.lowercase()?.trim()) {
@@ -79,6 +100,7 @@ class AzanForegroundService : Service() {
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+        serviceInstance = this
         initFromPrefs(this)
         val azanName = intent?.getStringExtra("AZAN_NAME") ?: "Azan"
         val pIdx = prayerNameToIndex(azanName)
@@ -98,10 +120,16 @@ class AzanForegroundService : Service() {
         val stopIntent = Intent(this, AzanForegroundService::class.java).apply {
             action = "STOP_AZAN"
         }
-        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE)
+        val stopPendingIntent = PendingIntent.getService(this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
         val mainIntent = Intent(this, MainActivity::class.java).apply {
             putExtra("FROM_ALARM", true)
+            addFlags(
+                Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+            )
         }
         val mainPendingIntent = PendingIntent.getActivity(this, 0, mainIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
 
@@ -125,6 +153,22 @@ class AzanForegroundService : Service() {
             e.printStackTrace()
         }
 
+        // Requirement: When audio plays, open the app whether phone is locked or unlocked
+        try {
+            val pm = getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            @Suppress("DEPRECATION")
+            val wakeLock = pm?.newWakeLock(
+                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                android.os.PowerManager.ON_AFTER_RELEASE,
+                "offlineazan:service_audio_wake"
+            )
+            wakeLock?.acquire(15000L)
+            startActivity(mainIntent)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+
         registerScreenOffReceiver()
         playAzan()
 
@@ -140,7 +184,7 @@ class AzanForegroundService : Service() {
                         this,
                         screenOffReceiver,
                         filter,
-                        androidx.core.content.ContextCompat.RECEIVER_NOT_EXPORTED
+                        androidx.core.content.ContextCompat.RECEIVER_EXPORTED
                     )
                 } else {
                     registerReceiver(screenOffReceiver, filter)
@@ -163,7 +207,7 @@ class AzanForegroundService : Service() {
         }
     }
 
-    private fun stopAzanAudio() {
+    fun stopAzanAudio() {
         unregisterScreenOffReceiver()
         isPlayingAzan.value = false
         currentPlayingPrayerName.value = null
@@ -259,6 +303,9 @@ class AzanForegroundService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        if (serviceInstance == this) {
+            serviceInstance = null
+        }
         unregisterScreenOffReceiver()
         if (isPlayingAzan.value) {
             recordAudioFinished(this, System.currentTimeMillis(), lastAudioPrayerIndex.value)

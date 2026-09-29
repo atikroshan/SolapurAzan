@@ -21,6 +21,8 @@ Masjid Photo,https://drive.google.com/file/d/1QP6elu7nlZwmrxjG4p-eyZWOrEaEdiwo/v
 ,Fajr,Zohar,Asr,Maghrib,Isha,Jummah
 Azan,05:40,01:15,05:17,06:10,07:50,12:30
 Jammat,06:15,01:30,05:30,06:12,07:59,01:30
+Admin ID,admin,,,,,
+Password,9960171516,,,,,
 ,,,,,,
 Masjid Name,Hajrat Imam Hussain ,,,,,
 Address,Tai Chowk,,,,,
@@ -29,6 +31,8 @@ Masjid Photo,,,,,,
 ,Fajr,Zohar,Asr,Maghrib,Isha,Jummah
 Azan,05:42,01:15,05:18,06:11,07:55,12:30
 Jammat,06:17,01:30,05:32,06:13,08:05,01:30
+Admin ID,admin,,,,,
+Password,9970595659,,,,,
 """.trimIndent()
 
     fun extractGoogleDriveDirectUrl(rawUrl: String): String {
@@ -117,6 +121,9 @@ Jammat,06:17,01:30,05:32,06:13,08:05,01:30
             val iJammat = formatForCsv(m.ishaJammatFixed ?: "19:59")
             val jJammat = formatForCsv(m.jumahJammatTime)
             sb.append("Jammat,$fJammat,$zJammat,$aJammat,$mJammat,$iJammat,$jJammat\n")
+            val admId = if (m.adminId.isNotBlank()) m.adminId else "admin"
+            sb.append("Admin ID,$admId,,,,,\n")
+            sb.append("Password,${m.adminPassword},,,,,\n")
             sb.append(",,,,,,\n")
         }
         return sb.toString()
@@ -130,6 +137,8 @@ Jammat,06:17,01:30,05:32,06:13,08:05,01:30
         var currentAddress = ""
         var currentId = ""
         var currentPhoto = ""
+        var currentAdminId = "admin"
+        var currentPassword = ""
         var azanTimes = listOf<String>()
         var jammatTimes = listOf<String>()
 
@@ -171,7 +180,9 @@ Jammat,06:17,01:30,05:32,06:13,08:05,01:30
                     maghribAzanFixed = mAzan,
                     maghribJammatFixed = mJammat,
                     ishaAzanFixed = iAzan,
-                    ishaJammatFixed = iJammat
+                    ishaJammatFixed = iJammat,
+                    adminId = currentAdminId.ifBlank { "admin" },
+                    adminPassword = currentPassword
                 )
                 list.add(masjidItem)
             }
@@ -179,6 +190,8 @@ Jammat,06:17,01:30,05:32,06:13,08:05,01:30
             currentAddress = ""
             currentId = ""
             currentPhoto = ""
+            currentAdminId = "admin"
+            currentPassword = ""
             azanTimes = emptyList()
             jammatTimes = emptyList()
         }
@@ -206,6 +219,10 @@ Jammat,06:17,01:30,05:32,06:13,08:05,01:30
                 azanTimes = tokens.drop(1).filter { it.isNotEmpty() }
             } else if (first.equals("Jammat", ignoreCase = true)) {
                 jammatTimes = tokens.drop(1).filter { it.isNotEmpty() }
+            } else if (first.equals("Admin ID", ignoreCase = true) || first.equals("AdminID", ignoreCase = true)) {
+                currentAdminId = tokens.getOrElse(1) { "admin" }
+            } else if (first.equals("Password", ignoreCase = true)) {
+                currentPassword = tokens.getOrElse(1) { "" }
             }
         }
         flushCurrent()

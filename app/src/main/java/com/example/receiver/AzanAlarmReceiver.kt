@@ -25,5 +25,31 @@ class AzanAlarmReceiver : BroadcastReceiver() {
         } catch (e: Throwable) {
             e.printStackTrace()
         }
+
+        // Wake screen and launch MainActivity
+        try {
+            val pm = context.getSystemService(Context.POWER_SERVICE) as? android.os.PowerManager
+            @Suppress("DEPRECATION")
+            val wl = pm?.newWakeLock(
+                android.os.PowerManager.SCREEN_BRIGHT_WAKE_LOCK or
+                android.os.PowerManager.ACQUIRE_CAUSES_WAKEUP or
+                android.os.PowerManager.ON_AFTER_RELEASE,
+                "offlineazan:alarm_receiver_wake"
+            )
+            wl?.acquire(10000L)
+
+            val launchIntent = Intent(context, com.example.MainActivity::class.java).apply {
+                putExtra("FROM_ALARM", true)
+                addFlags(
+                    Intent.FLAG_ACTIVITY_NEW_TASK or
+                    Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                    Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                    Intent.FLAG_ACTIVITY_REORDER_TO_FRONT
+                )
+            }
+            context.startActivity(launchIntent)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
     }
 }

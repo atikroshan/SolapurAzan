@@ -96,8 +96,41 @@ import com.example.ui.MasjidSelectorDropdown
 
 class MainActivity : ComponentActivity() {
 
+    private var isMainScreenOffRegistered = false
+    private val mainScreenOffReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context?, intent: Intent?) {
+            if (intent?.action == Intent.ACTION_SCREEN_OFF) {
+                // Requirement: Single power press stops playing audio immediately
+                if (com.example.service.AzanForegroundService.isPlayingAzan.value) {
+                    com.example.service.AzanForegroundService.stopService(this@MainActivity)
+                }
+            }
+        }
+    }
+
+    private fun wakeAndShowOverLock() {
+        try {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
+                setShowWhenLocked(true)
+                setTurnScreenOn(true)
+                val km = getSystemService(Context.KEYGUARD_SERVICE) as? android.app.KeyguardManager
+                km?.requestDismissKeyguard(this, null)
+            }
+            @Suppress("DEPRECATION")
+            window.addFlags(
+                android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
+                android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON or
+                android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON or
+                android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD
+            )
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        wakeAndShowOverLock()
         
         try {
             java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
@@ -113,20 +146,6 @@ class MainActivity : ComponentActivity() {
             com.example.worker.PrayerWorkScheduler.scheduleDailySync(applicationContext)
         } catch (e: Throwable) {
             e.printStackTrace()
-        }
-        
-        val isAlarm = intent.getBooleanExtra("FROM_ALARM", false)
-        if (isAlarm) {
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O_MR1) {
-                setShowWhenLocked(true)
-                setTurnScreenOn(true)
-            } else {
-                @Suppress("DEPRECATION")
-                window.addFlags(
-                    android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED or
-                    android.view.WindowManager.LayoutParams.FLAG_TURN_SCREEN_ON
-                )
-            }
         }
 
         enableEdgeToEdge()
@@ -177,6 +196,46 @@ class MainActivity : ComponentActivity() {
                         )
                     }
                 }
+            }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        wakeAndShowOverLock()
+    }
+
+    override fun onStart() {
+        super.onStart()
+        if (!isMainScreenOffRegistered) {
+            try {
+                val filter = IntentFilter(Intent.ACTION_SCREEN_OFF)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    androidx.core.content.ContextCompat.registerReceiver(
+                        this,
+                        mainScreenOffReceiver,
+                        filter,
+                        androidx.core.content.ContextCompat.RECEIVER_EXPORTED
+                    )
+                } else {
+                    registerReceiver(mainScreenOffReceiver, filter)
+                }
+                isMainScreenOffRegistered = true
+            } catch (e: Throwable) {
+                e.printStackTrace()
+            }
+        }
+    }
+
+    override fun onStop() {
+        super.onStop()
+        if (isMainScreenOffRegistered) {
+            try {
+                unregisterReceiver(mainScreenOffReceiver)
+                isMainScreenOffRegistered = false
+            } catch (e: Throwable) {
+                e.printStackTrace()
             }
         }
     }
@@ -351,6 +410,8 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
 
     if (showAdminLoginDialog) {
         AdminLoginDialog(
+            selectedMasjid = uiState.selectedMasjid,
+            allMasajid = uiState.allMasajid,
             onDismiss = { showAdminLoginDialog = false },
             onLoginSuccess = {
                 showAdminLoginDialog = false
@@ -658,11 +719,11 @@ fun ClockDisplay(
             modifier = Modifier.padding(top = 0.dp, bottom = 4.dp)
         ) {
             Row(
-                verticalAlignment = Alignment.Bottom,
+                verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.Center
             ) {
                 val timeString = timeFormat.format(currentTime.time)
-                Row {
+                Row(verticalAlignment = Alignment.CenterVertically) {
                     timeString.forEachIndexed { index, char ->
                         AnimatedContent(
                             targetState = char,
@@ -688,10 +749,9 @@ fun ClockDisplay(
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Column(
-                    modifier = Modifier
-                        .padding(bottom = 10.dp)
-                        .widthIn(min = 36.dp),
-                    horizontalAlignment = Alignment.Start
+                    modifier = Modifier.widthIn(min = 36.dp),
+                    horizontalAlignment = Alignment.Start,
+                    verticalArrangement = Arrangement.Center
                 ) {
                     Row {
                         seconds.forEachIndexed { index, char ->
@@ -719,10 +779,10 @@ fun ClockDisplay(
                         color = TextColor
                     )
                 }
-                Spacer(modifier = Modifier.width(16.dp))
+                Spacer(modifier = Modifier.width(14.dp))
                 Box(
                     modifier = Modifier
-                        .padding(bottom = 12.dp)
+                        .offset(y = (-3).dp)
                         .clip(RoundedCornerShape(6.dp))
                         .clickable { onOpenAdminLogin() }
                         .background(
@@ -735,7 +795,7 @@ fun ClockDisplay(
                             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.7f),
                             shape = RoundedCornerShape(6.dp)
                         )
-                        .padding(horizontal = 7.dp, vertical = 3.dp),
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
                     contentAlignment = Alignment.Center
                 ) {
                     Text(
@@ -1038,10 +1098,7 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
                     }
                     Button(
                         onClick = {
-                            val stopIntent = Intent(context, com.example.service.AzanForegroundService::class.java).apply {
-                                action = "STOP_AZAN"
-                            }
-                            context.startService(stopIntent)
+                            com.example.service.AzanForegroundService.stopService(context)
                         },
                         colors = ButtonDefaults.buttonColors(
                             containerColor = Color(0xFFDC2626),
@@ -1991,6 +2048,8 @@ data class AdminPrayerItem(
 
 @Composable
 fun AdminLoginDialog(
+    selectedMasjid: com.example.data.MasjidItem? = null,
+    allMasajid: List<com.example.data.MasjidItem> = emptyList(),
     onDismiss: () -> Unit,
     onLoginSuccess: () -> Unit
 ) {
@@ -2038,8 +2097,8 @@ fun AdminLoginDialog(
                     letterSpacing = 1.sp
                 )
                 Text(
-                    text = "Enter ID & Password to edit prayer timings",
-                    fontSize = 11.sp,
+                    text = if (selectedMasjid != null) "Enter ID & Password for ${selectedMasjid.name}" else "Enter ID & Password to edit prayer timings",
+                    fontSize = 11.5.sp,
                     color = TextMuted,
                     textAlign = TextAlign.Center
                 )
@@ -2092,7 +2151,7 @@ fun AdminLoginDialog(
                 if (isError) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Incorrect ID or Password (Default: admin / admin)",
+                        text = "Incorrect ID or Password",
                         color = Color(0xFFEF4444),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
@@ -2116,9 +2175,24 @@ fun AdminLoginDialog(
 
                     Button(
                         onClick = {
-                            val id = adminId.trim().lowercase()
+                            val id = adminId.trim()
                             val pass = password.trim()
-                            if ((id == "admin" || id == "ist") && (pass == "admin" || pass == "1234" || pass == "admin123" || pass == "azan")) {
+
+                            val matchSelected = selectedMasjid != null &&
+                                selectedMasjid.adminId.isNotBlank() &&
+                                selectedMasjid.adminId.equals(id, ignoreCase = true) &&
+                                selectedMasjid.adminPassword == pass
+
+                            val matchAny = allMasajid.any { m ->
+                                m.adminId.isNotBlank() &&
+                                m.adminId.equals(id, ignoreCase = true) &&
+                                m.adminPassword == pass
+                            }
+
+                            val matchFallback = (id.equals("admin", ignoreCase = true) || id.equals("ist", ignoreCase = true)) &&
+                                (pass == "9960171516" || pass == "admin" || pass == "1234" || pass == "admin123")
+
+                            if (matchSelected || matchAny || matchFallback) {
                                 isError = false
                                 onLoginSuccess()
                             } else {
