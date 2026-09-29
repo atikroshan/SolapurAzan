@@ -2276,191 +2276,37 @@ fun AdminPanelScreen(
                     ) {
                         Row(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
                         ) {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(10.dp),
-                                modifier = Modifier.weight(1f)
+                            Box(
+                                modifier = Modifier
+                                    .size(42.dp)
+                                    .background(Color(0xFF1E293B), CircleShape)
+                                    .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f), CircleShape),
+                                contentAlignment = Alignment.Center
                             ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(42.dp)
-                                        .background(Color(0xFF1E293B), CircleShape)
-                                        .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f), CircleShape),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Outlined.Mosque,
-                                        contentDescription = null,
-                                        tint = Color(0xFFF3DE8E),
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                                Column {
-                                    Text(
-                                        text = curMasjid.name,
-                                        fontSize = 17.sp,
-                                        fontWeight = FontWeight.Black,
-                                        color = Color(0xFFF3DE8E),
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Text(
-                                        text = "${curMasjid.area} • ID: #${curMasjid.id}",
-                                        fontSize = 11.5.sp,
-                                        color = Color.White.copy(alpha = 0.8f)
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.Outlined.Mosque,
+                                    contentDescription = null,
+                                    tint = Color(0xFFF3DE8E),
+                                    modifier = Modifier.size(24.dp)
+                                )
                             }
-
-                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                                Surface(
-                                    color = Color(0xFF1E293B),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f)),
-                                    modifier = Modifier.clickable { showEditMasjidDialog = true }
-                                ) {
-                                    Text(
-                                        text = "Edit Info",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFFF3DE8E),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                    )
-                                }
-                                Surface(
-                                    color = Color(0xFF166534),
-                                    shape = RoundedCornerShape(8.dp),
-                                    border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.4f)),
-                                    modifier = Modifier.clickable { showAddMasjidDialog = true }
-                                ) {
-                                    Text(
-                                        text = "+ Add",
-                                        fontSize = 11.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = Color(0xFF86EFAC),
-                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        // Google Sheet & Drive Cloud Action Buttons
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(6.dp)
-                        ) {
-                            Button(
-                                onClick = {
-                                    viewModel.syncGoogleSheet()
-                                    android.widget.Toast.makeText(context, "Syncing with Google Sheet...", android.widget.Toast.LENGTH_SHORT).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF1E293B),
-                                    contentColor = Color(0xFF86EFAC)
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-                                border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.4f)),
-                                modifier = Modifier.weight(1f).height(36.dp)
-                            ) {
-                                if (uiState.isSyncingSheet) {
-                                    CircularProgressIndicator(
-                                        modifier = Modifier.size(14.dp),
-                                        color = Color(0xFF86EFAC),
-                                        strokeWidth = 2.dp
-                                    )
-                                } else {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(13.dp))
-                                        Text("Sync Sheet", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                            }
-
-                            Button(
-                                onClick = {
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GoogleSheetMasjidSync.SHEET_EDIT_URL))
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "Cannot open browser", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF1E293B),
-                                    contentColor = Color(0xFFF3DE8E)
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-                                border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.4f)),
-                                modifier = Modifier.weight(1f).height(36.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(Icons.Default.TableChart, contentDescription = null, modifier = Modifier.size(13.dp))
-                                    Text("Open Sheet", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            Button(
-                                onClick = {
-                                    try {
-                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GoogleSheetMasjidSync.DRIVE_FOLDER_URL))
-                                        context.startActivity(intent)
-                                    } catch (e: Exception) {
-                                        android.widget.Toast.makeText(context, "Cannot open browser", android.widget.Toast.LENGTH_SHORT).show()
-                                    }
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF1E293B),
-                                    contentColor = Color(0xFF60A5FA)
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-                                border = BorderStroke(1.dp, Color(0xFF60A5FA).copy(alpha = 0.4f)),
-                                modifier = Modifier.weight(1f).height(36.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(Icons.Default.CloudUpload, contentDescription = null, modifier = Modifier.size(13.dp))
-                                    Text("Drive Photos", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
-                                }
-                            }
-
-                            Button(
-                                onClick = {
-                                    val csv = viewModel.getGoogleSheetCsv()
-                                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                                    val clip = android.content.ClipData.newPlainText("Google Sheet CSV", csv)
-                                    clipboard.setPrimaryClip(clip)
-                                    android.widget.Toast.makeText(context, "CSV copied! Ready to paste into Google Sheet", android.widget.Toast.LENGTH_LONG).show()
-                                },
-                                colors = ButtonDefaults.buttonColors(
-                                    containerColor = Color(0xFF1E293B),
-                                    contentColor = Color(0xFFC084FC)
-                                ),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
-                                border = BorderStroke(1.dp, Color(0xFFC084FC).copy(alpha = 0.4f)),
-                                modifier = Modifier.weight(1f).height(36.dp)
-                            ) {
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                ) {
-                                    Icon(Icons.Default.ContentCopy, contentDescription = null, modifier = Modifier.size(13.dp))
-                                    Text("Copy CSV", fontSize = 10.5.sp, fontWeight = FontWeight.Bold)
-                                }
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = curMasjid.name,
+                                    fontSize = 17.sp,
+                                    fontWeight = FontWeight.Black,
+                                    color = Color(0xFFF3DE8E),
+                                    maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Text(
+                                    text = "${curMasjid.area} • ID: #${curMasjid.id}",
+                                    fontSize = 11.5.sp,
+                                    color = Color.White.copy(alpha = 0.8f)
+                                )
                             }
                         }
                     }
