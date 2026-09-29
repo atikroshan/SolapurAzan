@@ -218,18 +218,7 @@ class AzanViewModel(
     private val timingsFlow = _currentCalendar.flatMapLatest { cal ->
         val m = cal.get(Calendar.MONTH) + 1
         val d = cal.get(Calendar.DAY_OF_MONTH)
-        val isFriday = cal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
-        repository.getTimingsForDate(m, d).map { timing ->
-            if (timing != null) {
-                if (isFriday) {
-                    timing.copy(dhuhr = "12:30")
-                } else {
-                    timing.copy(dhuhr = "13:30")
-                }
-            } else {
-                timing
-            }
-        }
+        repository.getTimingsForDate(m, d)
     }
 
     val uiState: StateFlow<UIState> = combine(
@@ -262,13 +251,22 @@ class AzanViewModel(
 
         val effectiveTimings = if (adjustedTimings != null) {
             if (isFriday) {
-                val jumahAzan = customJumahAzan ?: adjustTime(selectedMasjid.jumahAzanTime, selectedMasjid.dhuhrOffset)
+                val jumahAzan = customJumahAzan ?: selectedMasjid.jumahAzanTime.ifBlank { "12:30" }
                 adjustedTimings.copy(dhuhr = jumahAzan)
             } else {
-                adjustedTimings.copy(dhuhr = "13:30")
+                adjustedTimings
             }
         } else {
-            adjustedTimings
+            AzanTiming(
+                month = m,
+                day = d,
+                fajr = selectedMasjid.fajrAzanFixed ?: "05:40",
+                sunrise = "06:45",
+                dhuhr = if (isFriday) (customJumahAzan ?: selectedMasjid.jumahAzanTime.ifBlank { "12:30" }) else (selectedMasjid.zoharAzanFixed ?: "13:15"),
+                asr = selectedMasjid.asrAzanFixed ?: "17:17",
+                maghrib = selectedMasjid.maghribAzanFixed ?: "18:10",
+                isha = selectedMasjid.ishaAzanFixed ?: "19:50"
+            )
         }
 
         UIState(

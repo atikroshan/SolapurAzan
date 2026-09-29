@@ -26,22 +26,10 @@ class AlarmScheduler(private val context: Context) {
 
         val parts = timeString.split(":")
         if (parts.size != 2) return
-        var hour = parts[0].toIntOrNull() ?: return
-        var minute = parts[1].toIntOrNull() ?: return
+        val hour = parts[0].toIntOrNull() ?: return
+        val minute = parts[1].toIntOrNull() ?: return
 
         val calendar = Calendar.getInstance(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
-        val isDhuhr = name.equals("Dhuhr", ignoreCase = true) || name.equals("Zohr", ignoreCase = true) || name.equals("Jumah", ignoreCase = true)
-
-        if (isDhuhr) {
-            val todayIsFriday = calendar.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
-            if (todayIsFriday) {
-                hour = 12
-                minute = 30
-            } else {
-                hour = 13
-                minute = 30
-            }
-        }
 
         calendar.apply {
             set(Calendar.HOUR_OF_DAY, hour)
@@ -53,17 +41,6 @@ class AlarmScheduler(private val context: Context) {
         // If time has already passed today, schedule for tomorrow
         if (calendar.timeInMillis <= System.currentTimeMillis()) {
             calendar.add(Calendar.DAY_OF_YEAR, 1)
-            // Re-evaluate target day's Friday vs non-Friday rule for Dhuhr
-            if (isDhuhr) {
-                val tomorrowIsFriday = calendar.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
-                if (tomorrowIsFriday) {
-                    calendar.set(Calendar.HOUR_OF_DAY, 12)
-                    calendar.set(Calendar.MINUTE, 30)
-                } else {
-                    calendar.set(Calendar.HOUR_OF_DAY, 13)
-                    calendar.set(Calendar.MINUTE, 30)
-                }
-            }
         }
 
         try {

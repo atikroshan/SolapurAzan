@@ -101,7 +101,15 @@ class MainActivity : ComponentActivity() {
         
         try {
             java.util.TimeZone.setDefault(java.util.TimeZone.getTimeZone("Asia/Kolkata"))
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+        try {
             com.example.service.AzanForegroundService.initFromPrefs(this)
+        } catch (e: Throwable) {
+            e.printStackTrace()
+        }
+        try {
             com.example.worker.PrayerWorkScheduler.scheduleDailySync(applicationContext)
         } catch (e: Throwable) {
             e.printStackTrace()
@@ -815,37 +823,80 @@ fun ClockDisplay(
 @Composable
 fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier: Modifier = Modifier) {
     val strings = LocalAppStrings.current
-    
-    // Determine next azan based on time (highlighted accordion stays open)
-    val initialNextIndex = remember(uiState.todayTimings) {
-        val nowMs = System.currentTimeMillis()
+    val currentUiState by rememberUpdatedState(uiState)
+    val context = androidx.compose.ui.platform.LocalContext.current
+
+    val curMasjid = uiState.selectedMasjid
+    val isFridayToday = uiState.selectedDate.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
+    val dhuhrLabel = if (isFridayToday) strings.jumah else strings.dhuhr.uppercase()
+
+    val fajrAzan = curMasjid.fajrAzanFixed ?: uiState.todayTimings?.fajr ?: "05:40"
+    val zoharAzan = if (isFridayToday) {
+        uiState.customJumahAzan ?: curMasjid.jumahAzanTime.ifBlank { "12:30" }
+    } else {
+        curMasjid.zoharAzanFixed ?: uiState.todayTimings?.dhuhr ?: "13:15"
+    }
+    val asrAzan = curMasjid.asrAzanFixed ?: uiState.todayTimings?.asr ?: "17:17"
+    val maghribAzan = curMasjid.maghribAzanFixed ?: uiState.todayTimings?.maghrib ?: "18:10"
+    val ishaAzan = curMasjid.ishaAzanFixed ?: uiState.todayTimings?.isha ?: "19:50"
+
+    fun computeCurrentNext(): Int {
         val isAudioPlaying = com.example.service.AzanForegroundService.isPlayingAzan.value
-        val lastFinishedTime = com.example.service.AzanForegroundService.lastAudioFinishedTime.value
         val lastAudioIdx = com.example.service.AzanForegroundService.lastAudioPrayerIndex.value
-        val fifteenMinMs = 15 * 60 * 1000L
 
         if (isAudioPlaying && lastAudioIdx in 0..5) {
-            lastAudioIdx
-        } else if (lastAudioIdx in 0..5 && lastFinishedTime > 0L && (nowMs - lastFinishedTime) < fifteenMinMs) {
-            lastAudioIdx
-        } else {
-            val timings = uiState.todayTimings
-            if (timings != null) {
-                val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
-                val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
-                val prayerSlots = listOf(timings.fajr, timings.dhuhr, timings.asr, timings.maghrib, timings.isha)
-                val minutesSlots = prayerSlots.map { 
-                    val p = it.split(":")
-                    if (p.size == 2) (p[0].toIntOrNull() ?: 0) * 60 + (p[1].toIntOrNull() ?: 0) else 0
-                }
-                val idx = minutesSlots.indexOfFirst { it > currentMinutes }
-                if (idx != -1) idx else 0
-            } else 0
+            return lastAudioIdx
+        }
+
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
+        val currentMinutes = cal.get(Calendar.HOUR_OF_DAY) * 60 + cal.get(Calendar.MINUTE)
+
+        val s = currentUiState.selectedMasjid
+        val isFri = currentUiState.selectedDate.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
+        val f = s.fajrAzanFixed ?: currentUiState.todayTimings?.fajr ?: "05:40"
+        val d = if (isFri) (currentUiState.customJumahAzan ?: s.jumahAzanTime.ifBlank { "12:30" }) else (s.zoharAzanFixed ?: currentUiState.todayTimings?.dhuhr ?: "13:15")
+        val a = s.asrAzanFixed ?: currentUiState.todayTimings?.asr ?: "17:17"
+        val m = s.maghribAzanFixed ?: currentUiState.todayTimings?.maghrib ?: "18:10"
+        val i = s.ishaAzanFixed ?: currentUiState.todayTimings?.isha ?: "19:50"
+
+        val fJammat = getEffectiveJammatTime("Fajr", f, currentUiState.customJammatTimes, isFri, s)
+        val dJammat = getEffectiveJammatTime("Dhuhr", d, currentUiState.customJammatTimes, isFri, s)
+        val aJammat = getEffectiveJammatTime("Asr", a, currentUiState.customJammatTimes, isFri, s)
+        val mJammat = getEffectiveJammatTime("Maghrib", m, currentUiState.customJammatTimes, isFri, s)
+        val iJammat = getEffectiveJammatTime("Isha", i, currentUiState.customJammatTimes, isFri, s)
+
+        fun toMin(t: String): Int {
+            val p = t.split(":")
+            return if (p.size >= 2) (p[0].toIntOrNull() ?: 0) * 60 + (p[1].toIntOrNull() ?: 0) else 0
+        }
+
+        val fJammatMin = toMin(fJammat)
+        val dJammatMin = toMin(dJammat)
+        val aJammatMin = toMin(aJammat)
+        val mJammatMin = toMin(mJammat)
+        val iJammatMin = toMin(iJammat)
+
+        return when {
+            currentMinutes <= fJammatMin -> 0 // Through Fajr Jamaat -> Fajr (Index 0)
+            currentMinutes <= dJammatMin -> 1 // Through Zohr Jamaat (e.g. 1:30 PM) -> Zohr (Index 1)
+            currentMinutes <= aJammatMin -> 2 // From 1:31 PM through Asr Jamaat -> Asr (Index 2)
+            currentMinutes <= mJammatMin -> 3 // Through Maghrib Jamaat -> Maghrib (Index 3)
+            currentMinutes <= iJammatMin -> 4 // Through Isha Jamaat -> Isha (Index 4)
+            else -> 0 // After Isha Jamaat at night -> Loops to tomorrow's Fajr (Index 0)
         }
     }
-    var currentNextIndex by remember { mutableIntStateOf(initialNextIndex) }
-    var lastTriggeredMinute by remember { mutableStateOf("") }
-    val context = androidx.compose.ui.platform.LocalContext.current
+
+    var currentNextIndex by remember(fajrAzan, zoharAzan, asrAzan, maghribAzan, ishaAzan, currentUiState.customJammatTimes, currentUiState.selectedMasjid) {
+        mutableIntStateOf(computeCurrentNext())
+    }
+    val initialMinuteKey = remember {
+        val cal = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata"))
+        val day = cal.get(Calendar.DAY_OF_YEAR)
+        val h = cal.get(Calendar.HOUR_OF_DAY)
+        val m = cal.get(Calendar.MINUTE)
+        String.format(java.util.Locale.US, "INIT-%02d:%02d-%d", h, m, day)
+    }
+    var lastTriggeredMinute by remember { mutableStateOf(initialMinuteKey) }
     var lastObservedDayOfYear by remember { mutableIntStateOf(Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")).get(Calendar.DAY_OF_YEAR)) }
     
     LaunchedEffect(Unit) {
@@ -857,64 +908,37 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
                 viewModel.refreshDate()
             }
 
-            val timings = uiState.todayTimings
-            if (timings != null) {
-                val currentHour = cal.get(Calendar.HOUR_OF_DAY)
-                val currentMin = cal.get(Calendar.MINUTE)
-                val currentMinutes = currentHour * 60 + currentMin
-                val currentTimeStr = String.format(java.util.Locale.US, "%02d:%02d", currentHour, currentMin)
-                
-                val slots = listOf(timings.fajr, timings.dhuhr, timings.asr, timings.maghrib, timings.isha, "01:30")
-                val minutesSlots = slots.map { 
-                    val p = it.split(":")
-                    if (p.size == 2) (p[0].toIntOrNull() ?: 0) * 60 + (p[1].toIntOrNull() ?: 0) else 0
-                }
-                
-                val idx = minutesSlots.indexOfFirst { it > currentMinutes }
-                val calculatedNext = if (idx != -1) idx else 0 // loop to fajr if all passed
-                
-                val nowMs = System.currentTimeMillis()
-                val isAudioPlaying = com.example.service.AzanForegroundService.isPlayingAzan.value
-                val lastFinishedTime = com.example.service.AzanForegroundService.lastAudioFinishedTime.value
-                val audioPrayerIdx = com.example.service.AzanForegroundService.lastAudioPrayerIndex.value
-                val fifteenMinMs = 15 * 60 * 1000L
+            currentNextIndex = computeCurrentNext()
 
-                if (isAudioPlaying && audioPrayerIdx in 0..5) {
-                    currentNextIndex = audioPrayerIdx
-                } else if (audioPrayerIdx in 0..5 && lastFinishedTime > 0L && (nowMs - lastFinishedTime) < fifteenMinMs) {
-                    // For 15 minutes after audio finishes, keep highlighted on this prayer!
-                    currentNextIndex = audioPrayerIdx
-                } else {
-                    // After 15 minutes have passed since audio finished, advance to the next upcoming prayer!
-                    currentNextIndex = calculatedNext
-                }
+            val currentHour = cal.get(Calendar.HOUR_OF_DAY)
+            val currentMin = cal.get(Calendar.MINUTE)
+            val currentTimeStr = String.format(java.util.Locale.US, "%02d:%02d", currentHour, currentMin)
 
-                // In-app prayer time audio playback trigger (plays user audio once and closes)
-                val prayerPairs = listOf(
-                    "Fajr" to (timings.fajr to uiState.fajrEnabled),
-                    "Dhuhr" to (timings.dhuhr to uiState.dhuhrEnabled),
-                    "Asr" to (timings.asr to uiState.asrEnabled),
-                    "Maghrib" to (timings.maghrib to uiState.maghribEnabled),
-                    "Isha" to (timings.isha to uiState.ishaEnabled)
-                )
-                for ((name, pair) in prayerPairs) {
-                    val (timeStr, isEnabled) = pair
-                    if (isEnabled && timeStr == currentTimeStr) {
-                        val triggerKey = "$name-$currentTimeStr-$todayDayOfYear"
-                        if (lastTriggeredMinute != triggerKey) {
-                            lastTriggeredMinute = triggerKey
-                            try {
-                                val serviceIntent = Intent(context, com.example.service.AzanForegroundService::class.java).apply {
-                                    putExtra("AZAN_NAME", name)
-                                }
-                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                    context.startForegroundService(serviceIntent)
-                                } else {
-                                    context.startService(serviceIntent)
-                                }
-                            } catch (e: Throwable) {
-                                e.printStackTrace()
+            // In-app prayer time audio playback trigger (plays user audio once and closes)
+            val prayerPairs = listOf(
+                "Fajr" to (fajrAzan to currentUiState.fajrEnabled),
+                "Dhuhr" to (zoharAzan to currentUiState.dhuhrEnabled),
+                "Asr" to (asrAzan to currentUiState.asrEnabled),
+                "Maghrib" to (maghribAzan to currentUiState.maghribEnabled),
+                "Isha" to (ishaAzan to currentUiState.ishaEnabled)
+            )
+            for ((name, pair) in prayerPairs) {
+                val (timeStr, isEnabled) = pair
+                if (isEnabled && timeStr == currentTimeStr) {
+                    val triggerKey = "$name-$currentTimeStr-$todayDayOfYear"
+                    if (lastTriggeredMinute != triggerKey) {
+                        lastTriggeredMinute = triggerKey
+                        try {
+                            val serviceIntent = Intent(context, com.example.service.AzanForegroundService::class.java).apply {
+                                putExtra("AZAN_NAME", name)
                             }
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
+                        } catch (e: Throwable) {
+                            e.printStackTrace()
                         }
                     }
                 }
@@ -923,14 +947,12 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
         }
     }
 
-    val isFridayToday = uiState.selectedDate.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.FRIDAY
-    val dhuhrLabel = if (isFridayToday) strings.jumah else strings.dhuhr.uppercase()
     val slots = listOf(
-        Triple("Fajr", strings.fajr.uppercase(), uiState.todayTimings?.fajr ?: "--:--"),
-        Triple("Dhuhr", dhuhrLabel, uiState.todayTimings?.dhuhr ?: if (isFridayToday) "12:30" else "13:30"),
-        Triple("Asr", strings.asr.uppercase(), uiState.todayTimings?.asr ?: "--:--"),
-        Triple("Maghrib", strings.maghrib.uppercase(), uiState.todayTimings?.maghrib ?: "--:--"),
-        Triple("Isha", strings.isha.uppercase(), uiState.todayTimings?.isha ?: "--:--"),
+        Triple("Fajr", strings.fajr.uppercase(), fajrAzan),
+        Triple("Dhuhr", dhuhrLabel, zoharAzan),
+        Triple("Asr", strings.asr.uppercase(), asrAzan),
+        Triple("Maghrib", strings.maghrib.uppercase(), maghribAzan),
+        Triple("Isha", strings.isha.uppercase(), ishaAzan),
         Triple("Tahajjud", strings.tahajjud.uppercase(), "01:30")
     )
     val toggles = listOf(
