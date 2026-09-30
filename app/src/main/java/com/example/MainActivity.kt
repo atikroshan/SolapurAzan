@@ -2381,6 +2381,85 @@ fun AdminPanelScreen(
                     }
                 }
 
+                // Online Google Sheet Sync Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131D32)),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.4f))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CloudSync,
+                                contentDescription = null,
+                                tint = Color(0xFF38BDF8),
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = "ONLINE GOOGLE SHEET SYNC",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color(0xFF38BDF8),
+                                letterSpacing = 1.sp
+                            )
+                        }
+
+                        Text(
+                            text = "Aap is phone me jo time change karenge, wo is device me hamesha save rahega (app band karne ke baad bhi). Dusre sabhi mobiles me ek sath naya time dikhane ke liye Online Google Sheet me update karein.",
+                            fontSize = 11.sp,
+                            color = Color.White.copy(alpha = 0.85f),
+                            lineHeight = 15.sp
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Button(
+                                onClick = {
+                                    try {
+                                        val intent = Intent(Intent.ACTION_VIEW, Uri.parse(GoogleSheetMasjidSync.SHEET_EDIT_URL))
+                                        context.startActivity(intent)
+                                    } catch (e: Exception) {
+                                        android.widget.Toast.makeText(context, "Cannot open browser", android.widget.Toast.LENGTH_SHORT).show()
+                                    }
+                                },
+                                modifier = Modifier.weight(1.3f),
+                                colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF0284C7)),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.OpenInNew, contentDescription = null, modifier = Modifier.size(15.dp), tint = Color.White)
+                                Spacer(modifier = Modifier.width(5.dp))
+                                Text("Open Google Sheet", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.syncGoogleSheet(forceOverwriteLocal = true)
+                                    android.widget.Toast.makeText(context, "Google Sheet se latest timings sync ho rahe hain...", android.widget.Toast.LENGTH_SHORT).show()
+                                },
+                                modifier = Modifier.weight(1f),
+                                border = BorderStroke(1.dp, Color(0xFF38BDF8).copy(alpha = 0.6f)),
+                                colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF38BDF8)),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 6.dp, vertical = 6.dp)
+                            ) {
+                                Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(15.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Sync Sheet", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+                }
+
                 adminPrayers.forEach { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -2492,8 +2571,8 @@ fun AdminPanelScreen(
                 onDismiss = { editingPrayer = null },
                 onSave = { newAzan, newJammat ->
                     viewModel.updatePrayerAndJammatTime(prayer.systemName, newAzan, newJammat)
-                    val msg = "${prayer.displayName} updated: Azan $newAzan • Jammat $newJammat"
-                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    val msg = "${prayer.displayName} is phone me save ho gaya! Sabhi mobiles me update ke liye Google Sheet me update karein."
+                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
                     editingPrayer = null
                 }
             )

@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.core.stringSetPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -16,6 +17,7 @@ class PreferencesRepository(private val context: Context) {
     private val KEY_RESTORED_TAQWA_POINTS = androidx.datastore.preferences.core.intPreferencesKey("restored_taqwa_points")
     private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
     private val KEY_CACHED_SHEET_CSV = stringPreferencesKey("cached_sheet_csv")
+    private val KEY_ADMIN_OVERRIDE_MASAJID = stringSetPreferencesKey("admin_override_masajid_ids")
 
     val isSetupCompletedFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_SETUP_COMPLETED] ?: true
@@ -117,6 +119,30 @@ class PreferencesRepository(private val context: Context) {
     suspend fun setSelectedMasjidId(masjidId: String) {
         context.dataStore.edit { prefs ->
             prefs[stringPreferencesKey("selected_masjid_id")] = masjidId
+        }
+    }
+
+    val localAdminEditedMasajidFlow: Flow<Set<String>> = context.dataStore.data.map { prefs ->
+        prefs[KEY_ADMIN_OVERRIDE_MASAJID] ?: emptySet()
+    }
+
+    suspend fun addLocalAdminEditedMasjid(masjidId: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_ADMIN_OVERRIDE_MASAJID] ?: emptySet()
+            prefs[KEY_ADMIN_OVERRIDE_MASAJID] = current + masjidId
+        }
+    }
+
+    suspend fun clearLocalAdminEditedMasjid(masjidId: String) {
+        context.dataStore.edit { prefs ->
+            val current = prefs[KEY_ADMIN_OVERRIDE_MASAJID] ?: emptySet()
+            prefs[KEY_ADMIN_OVERRIDE_MASAJID] = current - masjidId
+        }
+    }
+
+    suspend fun clearAllLocalAdminOverrides() {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_ADMIN_OVERRIDE_MASAJID] = emptySet()
         }
     }
 }

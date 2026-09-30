@@ -1590,21 +1590,7 @@ fun MonthPointHistoryCalendar(
             val isYesterdayFriday = yesterdayCal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
             val isTodayFriday = todayCal.get(Calendar.DAY_OF_WEEK) == Calendar.FRIDAY
 
-            // Yesterday Card
-            DayPrayerEditorCard(
-                label = appStrings.yesterdaySimple,
-                dateString = "$yesterdayDay ${appStrings.getMonthShortName(yesterdayMonth)}",
-                log = yesterdayLog,
-                badgeColor = Color(0xFF25D366),
-                isToday = false,
-                todayTimings = uiState.todayTimings,
-                isFriday = isYesterdayFriday,
-                onTogglePrayer = { prayerName ->
-                    onTogglePrayer(yesterdayMonth, yesterdayDay, prayerName)
-                }
-            )
-
-            // Today Card
+            // Today Card (Today on top)
             DayPrayerEditorCard(
                 label = appStrings.todaySimple,
                 dateString = "$todayDay ${appStrings.getMonthShortName(todayMonth)}",
@@ -1615,6 +1601,20 @@ fun MonthPointHistoryCalendar(
                 isFriday = isTodayFriday,
                 onTogglePrayer = { prayerName ->
                     onTogglePrayer(todayMonth, todayDay, prayerName)
+                }
+            )
+
+            // Yesterday Card (Yesterday below it)
+            DayPrayerEditorCard(
+                label = appStrings.yesterdaySimple,
+                dateString = "$yesterdayDay ${appStrings.getMonthShortName(yesterdayMonth)}",
+                log = yesterdayLog,
+                badgeColor = Color(0xFF25D366),
+                isToday = false,
+                todayTimings = uiState.todayTimings,
+                isFriday = isYesterdayFriday,
+                onTogglePrayer = { prayerName ->
+                    onTogglePrayer(yesterdayMonth, yesterdayDay, prayerName)
                 }
             )
         }

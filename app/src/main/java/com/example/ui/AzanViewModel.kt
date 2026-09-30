@@ -88,19 +88,39 @@ class AzanViewModel(
         }
     }
 
-    fun syncGoogleSheet() {
+    fun syncGoogleSheet(forceOverwriteLocal: Boolean = false) {
         viewModelScope.launch {
             try {
                 _isSyncingSheet.value = true
                 val csv = GoogleSheetMasjidSync.fetchCsv()
                 val parsed = GoogleSheetMasjidSync.parseCsv(csv)
                 if (parsed.isNotEmpty()) {
-                    MasjidRepository.setDynamicMasajid(parsed)
-                    _masajidList.value = parsed
-                    prefs.setCachedGoogleSheetCsv(csv)
+                    val localEditedIds = if (forceOverwriteLocal) {
+                        prefs.clearAllLocalAdminOverrides()
+                        emptySet()
+                    } else {
+                        prefs.localAdminEditedMasajidFlow.firstOrNull() ?: emptySet()
+                    }
+                    val currentLocalMasajid = _masajidList.value
+                    val mergedList = if (localEditedIds.isNotEmpty()) {
+                        parsed.map { remoteMasjid ->
+                            if (localEditedIds.contains(remoteMasjid.id)) {
+                                val local = currentLocalMasajid.find { it.id == remoteMasjid.id }
+                                local ?: remoteMasjid
+                            } else {
+                                remoteMasjid
+                            }
+                        }
+                    } else {
+                        parsed
+                    }
+                    MasjidRepository.setDynamicMasajid(mergedList)
+                    _masajidList.value = mergedList
+                    val newCsv = GoogleSheetMasjidSync.buildCsv(mergedList)
+                    prefs.setCachedGoogleSheetCsv(newCsv)
                     val currentSelectedId = prefs.selectedMasjidIdFlow.firstOrNull()
-                    if (currentSelectedId == null || parsed.none { it.id == currentSelectedId }) {
-                        prefs.setSelectedMasjidId(parsed.first().id)
+                    if (currentSelectedId == null || mergedList.none { it.id == currentSelectedId }) {
+                        prefs.setSelectedMasjidId(mergedList.first().id)
                     }
                 }
             } catch (e: Exception) {
@@ -333,6 +353,7 @@ class AzanViewModel(
             _masajidList.value = all
             val newCsv = GoogleSheetMasjidSync.buildCsv(all)
             prefs.setCachedGoogleSheetCsv(newCsv)
+            prefs.addLocalAdminEditedMasjid(updatedMasjid.id)
 
             if (prayerName.equals("Jumah", ignoreCase = true) || prayerName.equals("Jum'ah", ignoreCase = true)) {
                 prefs.setCustomJumahAzan(newAzanTime)
@@ -389,6 +410,7 @@ class AzanViewModel(
             val newCsv = GoogleSheetMasjidSync.buildCsv(all)
             prefs.setCachedGoogleSheetCsv(newCsv)
             prefs.setSelectedMasjidId(updated.id)
+            prefs.addLocalAdminEditedMasjid(updated.id)
         }
     }
 
