@@ -106,27 +106,6 @@ fun SupportScreen(
                         )
                     }
                 }
-
-                Button(
-                    onClick = onBack,
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1E293B),
-                        contentColor = primaryGold
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 12.dp, vertical = 4.dp),
-                    border = BorderStroke(1.dp, primaryGold.copy(alpha = 0.5f))
-                ) {
-                    Text(
-                        text = when (uiState.language) {
-                            "ur" -> "واپس"
-                            "hi" -> "वापस"
-                            else -> "Back"
-                        },
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
             }
 
             Spacer(modifier = Modifier.height(10.dp))

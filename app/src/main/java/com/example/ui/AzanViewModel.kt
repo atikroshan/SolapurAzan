@@ -50,7 +50,9 @@ data class UIState(
     val allMasajid: List<MasjidItem> = MasjidRepository.getAllMasajid(),
     val restoredTaqwaPoints: Int = 0,
     val isSetupCompleted: Boolean = true,
-    val isSyncingSheet: Boolean = false
+    val isSyncingSheet: Boolean = false,
+    val appsScriptUrl: String = "",
+    val lastSyncStatusMessage: String? = null
 )
 
 class AzanViewModel(
@@ -63,6 +65,7 @@ class AzanViewModel(
     private val _currentCalendar = MutableStateFlow(Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")))
     private val _isSyncingSheet = MutableStateFlow(false)
     private val _masajidList = MutableStateFlow<List<MasjidItem>>(MasjidRepository.getAllMasajid())
+    private val _lastSyncStatusMessage = MutableStateFlow<String?>(null)
 
     init {
         viewModelScope.launch {
@@ -256,8 +259,9 @@ class AzanViewModel(
             prefs.restoredTaqwaPointsFlow
         ) { cj, ja, setupDone, syncing, restoredPoints ->
             Triple(Pair(cj, ja), Pair(setupDone, syncing), restoredPoints)
-        }
-    ) { (language, toggles, calMasjidPoints), allLogs, timings, (jammatPair, setupPair, restoredPoints) ->
+        },
+        combine(prefs.appsScriptUrlFlow, _lastSyncStatusMessage) { url, msg -> Pair(url, msg) }
+    ) { (language, toggles, calMasjidPoints), allLogs, timings, (jammatPair, setupPair, restoredPoints), (appsScriptUrl, syncMsg) ->
         val (cal, selectedMasjid, masajid) = calMasjidPoints
         val (customJammat, customJumahAzan) = jammatPair
         val (isSetupCompleted, isSyncingSheet) = setupPair
@@ -311,7 +315,9 @@ class AzanViewModel(
             allMasajid = masajid,
             restoredTaqwaPoints = restoredPoints,
             isSetupCompleted = isSetupCompleted,
-            isSyncingSheet = isSyncingSheet
+            isSyncingSheet = isSyncingSheet,
+            appsScriptUrl = appsScriptUrl,
+            lastSyncStatusMessage = syncMsg
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), UIState())
 
@@ -327,7 +333,22 @@ class AzanViewModel(
         }
     }
 
-    fun updatePrayerAndJammatTime(prayerName: String, newAzanTime: String, newJammatTime: String) {
+    fun setAppsScriptUrl(url: String) {
+        viewModelScope.launch {
+            prefs.setAppsScriptUrl(url)
+        }
+    }
+
+    suspend fun testAppsScriptConnection(url: String): Pair<Boolean, String> {
+        return GoogleSheetMasjidSync.testAppsScriptConnection(url)
+    }
+
+    fun updatePrayerAndJammatTime(
+        prayerName: String,
+        newAzanTime: String,
+        newJammatTime: String,
+        onResult: ((Boolean, String) -> Unit)? = null
+    ) {
         val cal = _currentCalendar.value
         val m = cal.get(Calendar.MONTH) + 1
         val d = cal.get(Calendar.DAY_OF_MONTH)
@@ -364,17 +385,17 @@ class AzanViewModel(
                 prefs.setCustomJammatTime(dbName, newJammatTime)
             }
 
-            // Sync update to remote Google Sheet so all devices get the new time
-            try {
-                GoogleSheetMasjidSync.updateRemoteGoogleSheet(
-                    masjidId = updatedMasjid.id,
-                    prayerName = prayerName,
-                    azanTime = newAzanTime,
-                    jammatTime = newJammatTime
-                )
-            } catch (e: Exception) {
-                // Ignore background network error
-            }
+            // Sync update to remote Google Sheet
+            val currentUrl = prefs.appsScriptUrlFlow.firstOrNull() ?: ""
+            val (success, msg) = GoogleSheetMasjidSync.updateRemoteGoogleSheet(
+                masjidId = updatedMasjid.id,
+                prayerName = prayerName,
+                azanTime = newAzanTime,
+                jammatTime = newJammatTime,
+                webAppUrl = currentUrl
+            )
+            _lastSyncStatusMessage.value = msg
+            onResult?.invoke(success, msg)
         }
     }
 

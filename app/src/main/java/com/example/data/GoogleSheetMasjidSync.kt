@@ -103,7 +103,118 @@ Password,9595996629,,,,,
         return String.format(Locale.US, "%02d:%02d", h12, m)
     }
 
-    var APPS_SCRIPT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwMasjidSyncAutoDeploy/exec"
+    var APPS_SCRIPT_WEBAPP_URL = ""
+
+    val APPS_SCRIPT_SAMPLE_CODE = """
+function doGet(e) {
+  return handleRequest(e);
+}
+
+function doPost(e) {
+  return handleRequest(e);
+}
+
+function handleRequest(e) {
+  try {
+    var p = e.parameter || {};
+    var action = p.action || "ping";
+    
+    if (action === "ping") {
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Google Apps Script Azan Sync is active!"
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    if (action === "update") {
+      var id = (p.id || "").toString().trim();
+      var prayer = (p.prayer || "").toString().trim().toLowerCase();
+      var azan = (p.azan || "").toString().trim();
+      var jammat = (p.jammat || "").toString().trim();
+      
+      if (!id || !prayer) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "Missing id or prayer parameter"
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getActiveSheet();
+      var data = sheet.getDataRange().getValues();
+      
+      var colMap = {
+        "fajr": 1,
+        "zohar": 2,
+        "dhuhr": 2,
+        "asr": 3,
+        "maghrib": 4,
+        "isha": 5,
+        "jumah": 6,
+        "jummah": 6,
+        "jum'ah": 6
+      };
+      
+      var targetCol = colMap[prayer];
+      if (targetCol === undefined) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "Unknown prayer: " + prayer
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      // Find row where Column A is "ID" and Column B matches the masjid ID
+      var foundRow = -1;
+      for (var r = 0; r < data.length; r++) {
+        var firstCell = (data[r][0] || "").toString().trim();
+        var secondCell = (data[r][1] || "").toString().trim();
+        if (firstCell.toLowerCase() === "id" && secondCell === id) {
+          foundRow = r;
+          break;
+        }
+      }
+      
+      if (foundRow === -1) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "Masjid ID #" + id + " not found in sheet"
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      
+      // Find Azan and Jammat rows for this masjid block
+      var azanRow = -1;
+      var jammatRow = -1;
+      for (var r = foundRow; r < Math.min(data.length, foundRow + 8); r++) {
+        var tag = (data[r][0] || "").toString().trim().toLowerCase();
+        if (tag === "azan") azanRow = r;
+        if (tag === "jammat") jammatRow = r;
+      }
+      
+      if (azanRow !== -1 && azan) {
+        sheet.getRange(azanRow + 1, targetCol + 1).setValue(azan);
+      }
+      if (jammatRow !== -1 && jammat) {
+        sheet.getRange(jammatRow + 1, targetCol + 1).setValue(jammat);
+      }
+      
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Updated Masjid #" + id + " " + prayer + ": Azan " + azan + ", Jammat " + jammat
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+    
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: "Unknown action: " + action
+    })).setMimeType(ContentService.MimeType.JSON);
+  } catch (err) {
+    return ContentService.createTextOutput(JSON.stringify({
+      status: "error",
+      message: err.toString()
+    })).setMimeType(ContentService.MimeType.JSON);
+  }
+}
+    """.trimIndent()
 
     suspend fun updateRemoteGoogleSheet(
         masjidId: String,
@@ -111,25 +222,107 @@ Password,9595996629,,,,,
         azanTime: String,
         jammatTime: String,
         webAppUrl: String? = null
-    ): Boolean = withContext(Dispatchers.IO) {
-        val targetUrl = webAppUrl ?: APPS_SCRIPT_WEBAPP_URL
-        if (targetUrl.isBlank()) return@withContext false
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val targetUrl = webAppUrl?.trim()?.ifBlank { null } ?: APPS_SCRIPT_WEBAPP_URL.trim().ifBlank { null }
+        if (targetUrl == null) {
+            return@withContext Pair(false, "Apps Script WebApp URL not configured. Configure in Admin Panel.")
+        }
         try {
             val encodedPrayer = java.net.URLEncoder.encode(prayerName, "UTF-8")
             val encodedAzan = java.net.URLEncoder.encode(formatForCsv(azanTime), "UTF-8")
             val encodedJammat = java.net.URLEncoder.encode(formatForCsv(jammatTime), "UTF-8")
-            val fullUrl = "$targetUrl?action=update&id=$masjidId&prayer=$encodedPrayer&azan=$encodedAzan&jammat=$encodedJammat"
-            val url = URL(fullUrl)
-            val conn = (url.openConnection() as HttpURLConnection).apply {
-                requestMethod = "GET"
-                connectTimeout = 8000
-                readTimeout = 8000
-                instanceFollowRedirects = true
+            var currentUrl = if (targetUrl.contains("?")) {
+                "$targetUrl&action=update&id=$masjidId&prayer=$encodedPrayer&azan=$encodedAzan&jammat=$encodedJammat"
+            } else {
+                "$targetUrl?action=update&id=$masjidId&prayer=$encodedPrayer&azan=$encodedAzan&jammat=$encodedJammat"
             }
-            val code = conn.responseCode
-            code in 200..299 || code in 300..399
+
+            var redirectCount = 0
+            var finalCode = 0
+            var responseBody = ""
+
+            while (redirectCount < 6) {
+                val url = URL(currentUrl)
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 12000
+                    readTimeout = 12000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "AzanTimeApp/2.6")
+                }
+                finalCode = conn.responseCode
+                if (finalCode in listOf(301, 302, 303, 307, 308)) {
+                    val location = conn.getHeaderField("Location")
+                    if (!location.isNullOrBlank()) {
+                        currentUrl = location
+                        redirectCount++
+                        continue
+                    }
+                }
+
+                responseBody = try {
+                    val stream = if (finalCode in 200..299) conn.inputStream else conn.errorStream
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+                } catch (e: Exception) {
+                    ""
+                }
+                break
+            }
+
+            if (finalCode in 200..299) {
+                Pair(true, if (responseBody.isNotBlank()) responseBody.take(80) else "Google Sheet updated successfully")
+            } else {
+                Pair(false, "Google Sheet sync failed (HTTP $finalCode): ${responseBody.take(100)}")
+            }
         } catch (e: Exception) {
-            false
+            Pair(false, "Sync network error: ${e.localizedMessage ?: e.message}")
+        }
+    }
+
+    suspend fun testAppsScriptConnection(rawUrl: String): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val clean = rawUrl.trim()
+        if (clean.isBlank()) return@withContext Pair(false, "URL cannot be empty")
+        try {
+            var currentUrl = if (clean.contains("?")) "$clean&action=ping" else "$clean?action=ping"
+            var redirectCount = 0
+            var finalCode = 0
+            var responseBody = ""
+
+            while (redirectCount < 6) {
+                val url = URL(currentUrl)
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 12000
+                    readTimeout = 12000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "AzanTimeApp/2.6")
+                }
+                finalCode = conn.responseCode
+                if (finalCode in listOf(301, 302, 303, 307, 308)) {
+                    val location = conn.getHeaderField("Location")
+                    if (!location.isNullOrBlank()) {
+                        currentUrl = location
+                        redirectCount++
+                        continue
+                    }
+                }
+
+                responseBody = try {
+                    val stream = if (finalCode in 200..299) conn.inputStream else conn.errorStream
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+                } catch (e: Exception) {
+                    ""
+                }
+                break
+            }
+
+            if (finalCode in 200..299) {
+                Pair(true, "Connected! Server responded: ${responseBody.take(100)}")
+            } else {
+                Pair(false, "Server returned HTTP $finalCode: ${responseBody.take(120)}")
+            }
+        } catch (e: Exception) {
+            Pair(false, "Connection error: ${e.localizedMessage ?: e.message}")
         }
     }
 

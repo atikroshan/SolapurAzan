@@ -19,6 +19,12 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.SizeTransform
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.Spring
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.ui.text.AnnotatedString
+import kotlinx.coroutines.launch
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -524,30 +530,97 @@ fun LanguageCirclesRow(
     onLangSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val isEnglishActive = currentLang == "en"
+
     Row(
         modifier = modifier,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        LanguageCircleButton(label = "E", langCode = "en", currentLang = currentLang, onLangSelect = onLangSelect)
-        LanguageCircleButton(label = "ह", langCode = "hi", currentLang = currentLang, onLangSelect = onLangSelect)
-        LanguageCircleButton(label = "ر", langCode = "ur", currentLang = currentLang, onLangSelect = onLangSelect)
+        // English: morphs between circle (34x34) and rectangle (56x34, corner 8dp) with animation
+        LanguageAnimatedButton(
+            shortLabel = "E",
+            activeLabel = "ENG",
+            langCode = "en",
+            currentLang = currentLang,
+            isOtherLarger = false,
+            onLangSelect = onLangSelect
+        )
+
+        // Hindi: slightly larger (40x40 circle) when English is active
+        LanguageAnimatedButton(
+            shortLabel = "ह",
+            activeLabel = "हिंदी",
+            langCode = "hi",
+            currentLang = currentLang,
+            isOtherLarger = isEnglishActive,
+            onLangSelect = onLangSelect
+        )
+
+        // Urdu: slightly larger (40x40 circle) when English is active
+        LanguageAnimatedButton(
+            shortLabel = "ر",
+            activeLabel = "اردو",
+            langCode = "ur",
+            currentLang = currentLang,
+            isOtherLarger = isEnglishActive,
+            onLangSelect = onLangSelect
+        )
     }
 }
 
 @Composable
-fun LanguageCircleButton(
-    label: String,
+fun LanguageAnimatedButton(
+    shortLabel: String,
+    activeLabel: String,
     langCode: String,
     currentLang: String,
+    isOtherLarger: Boolean,
     onLangSelect: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
     val isSelected = currentLang == langCode
+
+    // Morph target dimensions
+    val targetWidth = when {
+        isSelected -> 56.dp
+        isOtherLarger -> 40.dp
+        else -> 34.dp
+    }
+    val targetHeight = when {
+        isSelected -> 34.dp
+        isOtherLarger -> 40.dp
+        else -> 34.dp
+    }
+    // Corner radius animation: rectangle = 8dp, circle = 20dp (for 40dp) or 17dp (for 34dp)
+    val targetCorner = when {
+        isSelected -> 8.dp
+        isOtherLarger -> 20.dp
+        else -> 17.dp
+    }
+
+    val animatedWidth by animateDpAsState(
+        targetValue = targetWidth,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow, dampingRatio = Spring.DampingRatioLowBouncy),
+        label = "lang_btn_width"
+    )
+    val animatedHeight by animateDpAsState(
+        targetValue = targetHeight,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "lang_btn_height"
+    )
+    val animatedCorner by animateDpAsState(
+        targetValue = targetCorner,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "lang_btn_corner"
+    )
+
+    val shape = RoundedCornerShape(animatedCorner)
+
     Box(
         modifier = modifier
-            .size(34.dp)
-            .clip(CircleShape)
+            .size(width = animatedWidth, height = animatedHeight)
+            .clip(shape)
             .background(
                 brush = if (isSelected) {
                     Brush.verticalGradient(
@@ -562,19 +635,43 @@ fun LanguageCircleButton(
             .border(
                 width = if (isSelected) 1.5.dp else 1.dp,
                 color = if (isSelected) Color(0xFFFFD700) else Color(0xFF26334A),
-                shape = CircleShape
+                shape = shape
             )
             .clickable { onLangSelect(langCode) },
         contentAlignment = Alignment.Center
     ) {
         Text(
-            text = label,
-            fontSize = if (langCode == "ur") 16.sp else 13.5.sp,
+            text = if (isSelected) activeLabel else shortLabel,
+            fontSize = when {
+                isSelected -> if (langCode == "ur") 13.sp else 12.5.sp
+                langCode == "ur" -> if (isOtherLarger) 18.sp else 16.sp
+                langCode == "hi" -> if (isOtherLarger) 17.sp else 14.5.sp
+                else -> 13.5.sp
+            },
             fontWeight = FontWeight.ExtraBold,
-            color = if (isSelected) Color(0xFF0C101B) else Color.White.copy(alpha = 0.8f),
+            color = if (isSelected) Color(0xFF0C101B) else Color.White.copy(alpha = 0.85f),
             textAlign = TextAlign.Center
         )
     }
+}
+
+@Composable
+fun LanguageCircleButton(
+    label: String,
+    langCode: String,
+    currentLang: String,
+    onLangSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    LanguageAnimatedButton(
+        shortLabel = label,
+        activeLabel = label,
+        langCode = langCode,
+        currentLang = currentLang,
+        isOtherLarger = false,
+        onLangSelect = onLangSelect,
+        modifier = modifier
+    )
 }
 
 @Composable
@@ -2353,6 +2450,8 @@ fun AdminPanelScreen(
     var editingPrayer by remember { mutableStateOf<AdminPrayerItem?>(null) }
     var showEditMasjidDialog by remember { mutableStateOf(false) }
     var showAddMasjidDialog by remember { mutableStateOf(false) }
+    var showAppsScriptSettingsDialog by remember { mutableStateOf(false) }
+    var showScriptCodeDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -2485,6 +2584,86 @@ fun AdminPanelScreen(
                     }
                 }
 
+                // Google Sheet Cloud Sync Status Card
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131C2E)),
+                    shape = RoundedCornerShape(14.dp),
+                    border = BorderStroke(1.dp, if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF86EFAC).copy(alpha = 0.6f) else Color(0xFFF3DE8E).copy(alpha = 0.5f))
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(
+                                modifier = Modifier.weight(1f),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Icon(
+                                    imageVector = if (uiState.appsScriptUrl.isNotBlank()) Icons.Default.CloudDone else Icons.Default.CloudSync,
+                                    contentDescription = null,
+                                    tint = if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF86EFAC) else Color(0xFFF3DE8E),
+                                    modifier = Modifier.size(22.dp)
+                                )
+                                Column {
+                                    Text(
+                                        text = if (uiState.appsScriptUrl.isNotBlank()) "Google Sheet Auto-Sync Active" else "Google Sheet Sync Setup",
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 13.5.sp,
+                                        color = Color.White
+                                    )
+                                    Text(
+                                        text = if (uiState.appsScriptUrl.isNotBlank()) "Timing edits save automatically to remote Google Sheet" else "Configure WebApp URL so timing changes save to Google Sheet",
+                                        fontSize = 10.5.sp,
+                                        color = Color.White.copy(alpha = 0.7f)
+                                    )
+                                }
+                            }
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = { showAppsScriptSettingsDialog = true },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.7f))
+                            ) {
+                                Text(
+                                    text = if (uiState.appsScriptUrl.isNotBlank()) "Edit WebApp URL" else "Set WebApp URL",
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFFF3DE8E),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+
+                            OutlinedButton(
+                                onClick = { showScriptCodeDialog = true },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(8.dp),
+                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
+                                border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.7f))
+                            ) {
+                                Text(
+                                    text = "Get Script Code",
+                                    fontSize = 11.5.sp,
+                                    color = Color(0xFF86EFAC),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                        }
+                    }
+                }
+
                 adminPrayers.forEach { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
@@ -2595,8 +2774,17 @@ fun AdminPanelScreen(
                 prayer = prayer,
                 onDismiss = { editingPrayer = null },
                 onSave = { newAzan, newJammat ->
-                    viewModel.updatePrayerAndJammatTime(prayer.systemName, newAzan, newJammat)
-                    val msg = "${prayer.displayName} updated & saved: Azan $newAzan • Jammat $newJammat"
+                    viewModel.updatePrayerAndJammatTime(prayer.systemName, newAzan, newJammat) { success, syncMsg ->
+                        android.os.Handler(android.os.Looper.getMainLooper()).post {
+                            val toastMsg = if (success) {
+                                "✅ ${prayer.displayName} updated!\nGoogle Sheet Synced"
+                            } else {
+                                "⚠️ ${prayer.displayName} saved locally!\nSheet: $syncMsg"
+                            }
+                            android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_LONG).show()
+                        }
+                    }
+                    val msg = "${prayer.displayName} updated: Azan $newAzan • Jammat $newJammat"
                     android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
                     editingPrayer = null
                 }
@@ -2629,6 +2817,241 @@ fun AdminPanelScreen(
                     showAddMasjidDialog = false
                 }
             )
+        }
+
+        // Apps Script Settings Dialog
+        if (showAppsScriptSettingsDialog) {
+            AppsScriptSettingsDialog(
+                currentUrl = uiState.appsScriptUrl,
+                onDismiss = { showAppsScriptSettingsDialog = false },
+                onSave = { newUrl ->
+                    viewModel.setAppsScriptUrl(newUrl)
+                    android.widget.Toast.makeText(context, "Apps Script URL saved!", android.widget.Toast.LENGTH_SHORT).show()
+                },
+                onTest = { testUrl ->
+                    viewModel.testAppsScriptConnection(testUrl)
+                }
+            )
+        }
+
+        // Apps Script Code Guide Dialog
+        if (showScriptCodeDialog) {
+            AppsScriptCodeDialog(
+                onDismiss = { showScriptCodeDialog = false }
+            )
+        }
+    }
+}
+
+@Composable
+fun AppsScriptSettingsDialog(
+    currentUrl: String,
+    onDismiss: () -> Unit,
+    onSave: (String) -> Unit,
+    onTest: suspend (String) -> Pair<Boolean, String>
+) {
+    var urlText by remember { mutableStateOf(currentUrl) }
+    var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
+    var isTesting by remember { mutableStateOf(false) }
+    val coroutineScope = rememberCoroutineScope()
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF101625)),
+            border = BorderStroke(1.5.dp, Color(0xFFF3DE8E).copy(alpha = 0.6f)),
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(20.dp),
+                verticalArrangement = Arrangement.spacedBy(14.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "GOOGLE SHEET APPS SCRIPT URL",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFFF3DE8E),
+                    letterSpacing = 0.8.sp,
+                    textAlign = TextAlign.Center
+                )
+
+                Text(
+                    text = "Paste your deployed Google Apps Script Web App URL below so time edits sync directly to the Google Sheet.",
+                    fontSize = 12.sp,
+                    color = Color.White.copy(alpha = 0.75f),
+                    textAlign = TextAlign.Center
+                )
+
+                OutlinedTextField(
+                    value = urlText,
+                    onValueChange = { 
+                        urlText = it
+                        testResult = null
+                    },
+                    label = { Text("Apps Script WebApp URL") },
+                    placeholder = { Text("https://script.google.com/macros/s/.../exec") },
+                    singleLine = false,
+                    maxLines = 3,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = Color.White,
+                        unfocusedTextColor = Color.White,
+                        focusedBorderColor = Color(0xFFF3DE8E),
+                        unfocusedBorderColor = Color.White.copy(alpha = 0.3f),
+                        focusedLabelColor = Color(0xFFF3DE8E),
+                        unfocusedLabelColor = Color.White.copy(alpha = 0.5f)
+                    ),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                testResult?.let { (success, msg) ->
+                    Text(
+                        text = if (success) "🟢 $msg" else "🔴 $msg",
+                        fontSize = 11.5.sp,
+                        color = if (success) Color(0xFF86EFAC) else Color(0xFFFCA5A5),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    OutlinedButton(
+                        onClick = {
+                            isTesting = true
+                            coroutineScope.launch {
+                                testResult = onTest(urlText)
+                                isTesting = false
+                            }
+                        },
+                        enabled = !isTesting && urlText.isNotBlank(),
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.6f))
+                    ) {
+                        Text(if (isTesting) "Testing..." else "Test URL", color = Color(0xFFF3DE8E), fontSize = 13.sp)
+                    }
+
+                    Button(
+                        onClick = {
+                            onSave(urlText)
+                            onDismiss()
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFF3DE8E))
+                    ) {
+                        Text("Save URL", color = Color(0xFF0C101B), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+                }
+
+                TextButton(onClick = onDismiss) {
+                    Text("Close", color = Color.White.copy(alpha = 0.6f), fontSize = 12.sp)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun AppsScriptCodeDialog(
+    onDismiss: () -> Unit
+) {
+    val context = LocalContext.current
+    val clipboardManager = LocalClipboardManager.current
+    val code = GoogleSheetMasjidSync.APPS_SCRIPT_SAMPLE_CODE
+
+    Dialog(
+        onDismissRequest = onDismiss,
+        properties = DialogProperties(usePlatformDefaultWidth = false)
+    ) {
+        Card(
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = Color(0xFF101625)),
+            border = BorderStroke(1.5.dp, Color(0xFF86EFAC).copy(alpha = 0.6f)),
+            modifier = Modifier
+                .fillMaxWidth(0.94f)
+                .fillMaxHeight(0.85f)
+                .padding(16.dp)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(18.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "APPS SCRIPT SETUP GUIDE",
+                    fontSize = 16.sp,
+                    fontWeight = FontWeight.Black,
+                    color = Color(0xFF86EFAC),
+                    letterSpacing = 0.8.sp
+                )
+
+                Text(
+                    text = "Follow these 4 simple steps to connect your Google Sheet:\n" +
+                            "1. Open your Google Sheet in browser.\n" +
+                            "2. Click Extensions > Apps Script.\n" +
+                            "3. Replace all code with the script below and Save 💾.\n" +
+                            "4. Click Deploy > New deployment > Web App > Execute as: Me, Who has access: Anyone > Deploy.\n" +
+                            "5. Copy the Web App URL and paste it into 'Set WebApp URL' in this app.",
+                    fontSize = 11.5.sp,
+                    color = Color.White.copy(alpha = 0.85f),
+                    lineHeight = 16.sp
+                )
+
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                        .background(Color(0xFF070B12), RoundedCornerShape(10.dp))
+                        .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                        .padding(10.dp)
+                        .verticalScroll(rememberScrollState())
+                ) {
+                    Text(
+                        text = code,
+                        fontSize = 10.5.sp,
+                        color = Color(0xFF86EFAC),
+                        fontFamily = androidx.compose.ui.text.font.FontFamily.Monospace
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Button(
+                        onClick = {
+                            clipboardManager.setText(AnnotatedString(code))
+                            android.widget.Toast.makeText(context, "Apps Script code copied to clipboard!", android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                        modifier = Modifier.weight(1f),
+                        shape = RoundedCornerShape(10.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = Color(0xFF86EFAC))
+                    ) {
+                        Text("Copy Code", color = Color(0xFF0C101B), fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    }
+
+                    OutlinedButton(
+                        onClick = onDismiss,
+                        modifier = Modifier.weight(0.7f),
+                        shape = RoundedCornerShape(10.dp),
+                        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.4f))
+                    ) {
+                        Text("Close", color = Color.White, fontSize = 13.sp)
+                    }
+                }
+            }
         }
     }
 }

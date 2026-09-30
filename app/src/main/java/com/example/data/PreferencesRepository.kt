@@ -18,6 +18,7 @@ class PreferencesRepository(private val context: Context) {
     private val KEY_SETUP_COMPLETED = booleanPreferencesKey("setup_completed")
     private val KEY_CACHED_SHEET_CSV = stringPreferencesKey("cached_sheet_csv")
     private val KEY_ADMIN_OVERRIDE_MASAJID = stringSetPreferencesKey("admin_override_masajid_ids")
+    private val KEY_APPS_SCRIPT_URL = stringPreferencesKey("apps_script_url")
 
     val isSetupCompletedFlow: Flow<Boolean> = context.dataStore.data.map { prefs ->
         prefs[KEY_SETUP_COMPLETED] ?: true
@@ -143,6 +144,16 @@ class PreferencesRepository(private val context: Context) {
     suspend fun clearAllLocalAdminOverrides() {
         context.dataStore.edit { prefs ->
             prefs[KEY_ADMIN_OVERRIDE_MASAJID] = emptySet()
+        }
+    }
+
+    val appsScriptUrlFlow: Flow<String> = context.dataStore.data.map { prefs ->
+        prefs[KEY_APPS_SCRIPT_URL] ?: ""
+    }
+
+    suspend fun setAppsScriptUrl(url: String) {
+        context.dataStore.edit { prefs ->
+            prefs[KEY_APPS_SCRIPT_URL] = url.trim()
         }
     }
 }
