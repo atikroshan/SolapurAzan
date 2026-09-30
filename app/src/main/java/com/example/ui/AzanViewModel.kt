@@ -363,6 +363,18 @@ class AzanViewModel(
                 repository.updatePrayerTime(m, d, dbName, newAzanTime, applyToAll = true)
                 prefs.setCustomJammatTime(dbName, newJammatTime)
             }
+
+            // Sync update to remote Google Sheet so all devices get the new time
+            try {
+                GoogleSheetMasjidSync.updateRemoteGoogleSheet(
+                    masjidId = updatedMasjid.id,
+                    prayerName = prayerName,
+                    azanTime = newAzanTime,
+                    jammatTime = newJammatTime
+                )
+            } catch (e: Exception) {
+                // Ignore background network error
+            }
         }
     }
 

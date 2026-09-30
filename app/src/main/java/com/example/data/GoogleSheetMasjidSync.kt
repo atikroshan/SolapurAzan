@@ -103,6 +103,36 @@ Password,9595996629,,,,,
         return String.format(Locale.US, "%02d:%02d", h12, m)
     }
 
+    var APPS_SCRIPT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwMasjidSyncAutoDeploy/exec"
+
+    suspend fun updateRemoteGoogleSheet(
+        masjidId: String,
+        prayerName: String,
+        azanTime: String,
+        jammatTime: String,
+        webAppUrl: String? = null
+    ): Boolean = withContext(Dispatchers.IO) {
+        val targetUrl = webAppUrl ?: APPS_SCRIPT_WEBAPP_URL
+        if (targetUrl.isBlank()) return@withContext false
+        try {
+            val encodedPrayer = java.net.URLEncoder.encode(prayerName, "UTF-8")
+            val encodedAzan = java.net.URLEncoder.encode(formatForCsv(azanTime), "UTF-8")
+            val encodedJammat = java.net.URLEncoder.encode(formatForCsv(jammatTime), "UTF-8")
+            val fullUrl = "$targetUrl?action=update&id=$masjidId&prayer=$encodedPrayer&azan=$encodedAzan&jammat=$encodedJammat"
+            val url = URL(fullUrl)
+            val conn = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "GET"
+                connectTimeout = 8000
+                readTimeout = 8000
+                instanceFollowRedirects = true
+            }
+            val code = conn.responseCode
+            code in 200..299 || code in 300..399
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     suspend fun fetchCsv(urlStr: String = DEFAULT_SHEET_URL): String = withContext(Dispatchers.IO) {
         val url = URL(urlStr)
         val conn = (url.openConnection() as HttpURLConnection).apply {
