@@ -2151,10 +2151,11 @@ fun AdminLoginDialog(
                 if (isError) {
                     Spacer(modifier = Modifier.height(6.dp))
                     Text(
-                        text = "Incorrect ID or Password",
+                        text = if (selectedMasjid != null) "Incorrect ID or Password for ${selectedMasjid.name}" else "Incorrect ID or Password",
                         color = Color(0xFFEF4444),
                         fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold
+                        fontWeight = FontWeight.Bold,
+                        textAlign = TextAlign.Center
                     )
                 }
 
@@ -2178,21 +2179,15 @@ fun AdminLoginDialog(
                             val id = adminId.trim()
                             val pass = password.trim()
 
-                            val matchSelected = selectedMasjid != null &&
-                                selectedMasjid.adminId.isNotBlank() &&
-                                selectedMasjid.adminId.equals(id, ignoreCase = true) &&
-                                selectedMasjid.adminPassword == pass
+                            val curMasjid = selectedMasjid ?: allMasajid.firstOrNull()
+                            val targetAdminId = curMasjid?.adminId?.trim().takeUnless { it.isNullOrBlank() } ?: "admin"
+                            val targetPassword = curMasjid?.adminPassword?.trim() ?: ""
 
-                            val matchAny = allMasajid.any { m ->
-                                m.adminId.isNotBlank() &&
-                                m.adminId.equals(id, ignoreCase = true) &&
-                                m.adminPassword == pass
-                            }
+                            // Condition: Must match Google Sheet Admin ID and Password for the currently selected masjid
+                            val isMatch = id.equals(targetAdminId, ignoreCase = true) &&
+                                (pass == targetPassword || (targetPassword.isBlank() && (pass == "admin" || pass == "1234")))
 
-                            val matchFallback = (id.equals("admin", ignoreCase = true) || id.equals("ist", ignoreCase = true)) &&
-                                (pass == "9960171516" || pass == "admin" || pass == "1234" || pass == "admin123")
-
-                            if (matchSelected || matchAny || matchFallback) {
+                            if (isMatch) {
                                 isError = false
                                 onLoginSuccess()
                             } else {

@@ -24,15 +24,35 @@ Jammat,06:15,01:30,05:30,06:12,07:59,01:30
 Admin ID,admin,,,,,
 Password,9960171516,,,,,
 ,,,,,,
-Masjid Name,Hajrat Imam Hussain ,,,,,
+Masjid Name,Hajrat Imam Hussain Masjid,,,,,
 Address,Tai Chowk,,,,,
 ID,100111112,,,,,
-Masjid Photo,,,,,,
+Masjid Photo,https://drive.google.com/file/d/1Wtt9FYQSWz2o0PpxuCtGJZjSKBOLNhjH/view?usp=drive_link,,,,,
 ,Fajr,Zohar,Asr,Maghrib,Isha,Jummah
 Azan,05:42,01:15,05:18,06:11,07:55,12:30
 Jammat,06:17,01:30,05:32,06:13,08:05,01:30
 Admin ID,admin,,,,,
 Password,9970595659,,,,,
+,,,,,,
+Masjid Name,Abu Bakar Siddique Masjid,,,,,
+Address,Mumtaz Nagar,,,,,
+ID,100111113,,,,,
+Masjid Photo,https://drive.google.com/file/d/1wtzGogJQgbTLR1rHlTAocBeMdwMESBtD/view?usp=drive_link,,,,,
+,Fajr,Zohar,Asr,Maghrib,Isha,Jummah
+Azan,05:42,01:15,05:18,06:11,07:55,12:30
+Jammat,06:17,01:30,05:32,06:13,08:05,01:30
+Admin ID,admin,,,,,
+Password,9371883412,,,,,
+,,,,,,
+Masjid Name,Hazrat Jang Bahadur Salabat Kha,,,,,
+Address,"Bhayya Chowk, Railway Station Ground",,,,,
+ID,100111114,,,,,
+Masjid Photo,https://drive.google.com/file/d/1Ju4p3KkS6sc3vzSvf68Bm1panplC_g8r/view?usp=drive_link,,,,,
+,Fajr,Zohar,Asr,Maghrib,Isha,Jummah
+Azan,05:42,01:15,05:18,06:11,07:55,12:30
+Jammat,06:17,01:30,05:32,06:13,08:05,01:30
+Admin ID,admin,,,,,
+Password,9595996629,,,,,
 """.trimIndent()
 
     fun extractGoogleDriveDirectUrl(rawUrl: String): String {

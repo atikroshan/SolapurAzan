@@ -68,7 +68,7 @@ class AzanViewModel(
         viewModelScope.launch {
             try {
                 val cached = prefs.cachedGoogleSheetCsvFlow.firstOrNull()
-                val csvToUse = if (!cached.isNullOrBlank()) cached else GoogleSheetMasjidSync.DEFAULT_CSV_CONTENT
+                val csvToUse = if (!cached.isNullOrBlank() && cached.contains("Password", ignoreCase = true)) cached else GoogleSheetMasjidSync.DEFAULT_CSV_CONTENT
                 val parsed = GoogleSheetMasjidSync.parseCsv(csvToUse)
                 if (parsed.isNotEmpty()) {
                     MasjidRepository.setDynamicMasajid(parsed)
