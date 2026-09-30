@@ -256,6 +256,20 @@ fun TrackerBoardContent(
                         .padding(bottom = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Top Left Language Circles (E, ह, ا)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        com.example.LanguageCirclesRow(
+                            currentLang = uiState.language,
+                            onLangSelect = onLanguageSelect
+                        )
+                    }
+
                     // Unified Consistent App Header
                     Column(
                         modifier = Modifier
@@ -294,8 +308,6 @@ fun TrackerBoardContent(
                             modifier = Modifier.padding(top = 1.dp)
                         )
                     }
-                    
-                    com.example.LanguageToggleRow(uiState.language, onLanguageSelect)
                 }
 
                 Column(
@@ -2996,6 +3008,20 @@ fun RamazanScreenContent(
                         .padding(bottom = 6.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Top Left Language Circles (E, ह, ا)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 2.dp),
+                        horizontalArrangement = Arrangement.Start,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        com.example.LanguageCirclesRow(
+                            currentLang = uiState.language,
+                            onLangSelect = onLanguageSelect
+                        )
+                    }
+
                     // Unified Consistent App Header
                     Column(
                         modifier = Modifier
@@ -3034,8 +3060,6 @@ fun RamazanScreenContent(
                             modifier = Modifier.padding(top = 1.dp)
                         )
                     }
-
-                    com.example.LanguageToggleRow(uiState.language, onLanguageSelect)
                 }
 
                 Column(

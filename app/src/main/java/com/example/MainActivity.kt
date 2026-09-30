@@ -256,6 +256,7 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
     var selectedTab by remember { mutableStateOf("home") } // "record", "home", or "ramazan"
     var showAdminLoginDialog by remember { mutableStateOf(false) }
     var showAdminPanel by remember { mutableStateOf(false) }
+    var showSupportScreen by remember { mutableStateOf(false) }
     var showMasjidSelectorScreen by remember { mutableStateOf(false) }
 
     LaunchedEffect(isRamazanActive) {
@@ -296,6 +297,12 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
             viewModel = viewModel,
             uiState = uiState,
             onBack = { showAdminPanel = false }
+        )
+    } else if (showSupportScreen) {
+        BackHandler { showSupportScreen = false }
+        com.example.ui.SupportScreen(
+            uiState = uiState,
+            onBack = { showSupportScreen = false }
         )
     } else {
         Scaffold(
@@ -399,7 +406,8 @@ fun AzanScreen(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifi
                             viewModel = viewModel,
                             uiState = uiState,
                             onOpenAdminLogin = { showAdminLoginDialog = true },
-                            onChangeMasjid = { showMasjidSelectorScreen = true }
+                            onChangeMasjid = { showMasjidSelectorScreen = true },
+                            onOpenSupport = { showSupportScreen = true }
                         )
                     }
                 }
@@ -427,6 +435,7 @@ fun AzanHomeContent(
     uiState: com.example.ui.UIState,
     onOpenAdminLogin: () -> Unit = {},
     onChangeMasjid: () -> Unit = {},
+    onOpenSupport: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Column(
@@ -441,6 +450,22 @@ fun AzanHomeContent(
                 .weight(1f),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
+            // Top Row: 3 Language Circles on Left (E, ह, ا) + Support Icon Button on Right (ONLY on Home!)
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 2.dp, vertical = 2.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                LanguageCirclesRow(
+                    currentLang = uiState.language,
+                    onLangSelect = { viewModel.setLanguage(it) }
+                )
+
+                SupportIconButton(onClick = onOpenSupport)
+            }
+
             // Masjid Dropdown Selector (100+ Masajid)
             MasjidSelectorDropdown(
                 selectedMasjid = uiState.selectedMasjid,
@@ -462,9 +487,6 @@ fun AzanHomeContent(
                 onOpenAdminLogin = onOpenAdminLogin,
                 modifier = Modifier.fillMaxWidth()
             )
-
-            // Language Switcher Row (Header)
-            LanguageToggleRow(uiState.language) { viewModel.setLanguage(it) }
 
             Column(
                 modifier = Modifier
@@ -492,6 +514,88 @@ fun AzanHomeContent(
                 .fillMaxWidth()
                 .padding(top = 8.dp, bottom = 4.dp),
             textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun LanguageCirclesRow(
+    currentLang: String,
+    onLangSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Row(
+        modifier = modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        LanguageCircleButton(label = "E", langCode = "en", currentLang = currentLang, onLangSelect = onLangSelect)
+        LanguageCircleButton(label = "ह", langCode = "hi", currentLang = currentLang, onLangSelect = onLangSelect)
+        LanguageCircleButton(label = "ر", langCode = "ur", currentLang = currentLang, onLangSelect = onLangSelect)
+    }
+}
+
+@Composable
+fun LanguageCircleButton(
+    label: String,
+    langCode: String,
+    currentLang: String,
+    onLangSelect: (String) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val isSelected = currentLang == langCode
+    Box(
+        modifier = modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(
+                brush = if (isSelected) {
+                    Brush.verticalGradient(
+                        listOf(Color(0xFFF3DE8E), Color(0xFFD49B37))
+                    )
+                } else {
+                    Brush.verticalGradient(
+                        listOf(Color(0xFF131926), Color(0xFF0F1522))
+                    )
+                }
+            )
+            .border(
+                width = if (isSelected) 1.5.dp else 1.dp,
+                color = if (isSelected) Color(0xFFFFD700) else Color(0xFF26334A),
+                shape = CircleShape
+            )
+            .clickable { onLangSelect(langCode) },
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = label,
+            fontSize = if (langCode == "ur") 16.sp else 13.5.sp,
+            fontWeight = FontWeight.ExtraBold,
+            color = if (isSelected) Color(0xFF0C101B) else Color.White.copy(alpha = 0.8f),
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+@Composable
+fun SupportIconButton(
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Box(
+        modifier = modifier
+            .size(34.dp)
+            .clip(CircleShape)
+            .background(Color(0xFF131926))
+            .border(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.5f), CircleShape)
+            .clickable { onClick() },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Outlined.HeadsetMic,
+            contentDescription = "Support",
+            tint = Color(0xFFF3DE8E),
+            modifier = Modifier.size(18.dp)
         )
     }
 }
