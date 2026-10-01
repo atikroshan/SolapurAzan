@@ -173,7 +173,12 @@ data class AppStrings(
     // Miscellaneous
     val upcoming: String = "Upcoming",
     val ongoing: String = "ONGOING",
-    val none: String = "None"
+    val none: String = "None",
+
+    // Admin Panel & Sync
+    val timeUpdated: String = "Time updated",
+    val connect: String = "Connect",
+    val saved: String = "Saved"
 ) {
     fun getMonthFullName(month: Int): String = when (month) {
         1 -> jan
@@ -409,7 +414,12 @@ val HindiStrings = AppStrings(
     // Miscellaneous
     upcoming = "आगामी",
     ongoing = "जारी",
-    none = "कोई नहीं"
+    none = "कोई नहीं",
+
+    // Admin Panel & Sync
+    timeUpdated = "टाइम अपडेट हो गया",
+    connect = "कनेक्ट",
+    saved = "सेव्ड"
 )
 
 val UrduStrings = AppStrings(
@@ -583,7 +593,12 @@ val UrduStrings = AppStrings(
     // Miscellaneous
     upcoming = "آنے والا",
     ongoing = "جاری",
-    none = "کوئی نہیں"
+    none = "کوئی نہیں",
+
+    // Admin Panel & Sync
+    timeUpdated = "ٹائم اپڈیٹ ہو گیا",
+    connect = "کنیکٹ",
+    saved = "محفوظ"
 )
 
 val LocalAppStrings = staticCompositionLocalOf { EnglishStrings }

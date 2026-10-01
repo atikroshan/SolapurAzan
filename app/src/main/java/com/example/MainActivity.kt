@@ -2471,6 +2471,8 @@ fun AdminPanelScreen(
     var showAddMasjidDialog by remember { mutableStateOf(false) }
     var showAppsScriptSettingsDialog by remember { mutableStateOf(false) }
     var showScriptCodeDialog by remember { mutableStateOf(false) }
+    var isSyncingNow by remember { mutableStateOf(false) }
+    var syncStatusErrorDialog by remember { mutableStateOf<String?>(null) }
 
     Box(
         modifier = Modifier
@@ -2525,29 +2527,86 @@ fun AdminPanelScreen(
                     }
                 }
 
-                Button(
-                    onClick = {
-                        scope.launch {
-                            val success = viewModel.syncMasjidToSheet(uiState.selectedMasjid)
-                            android.os.Handler(android.os.Looper.getMainLooper()).post {
-                                if (success) {
-                                    android.widget.Toast.makeText(context, "✅ Synced to Google Sheet!", android.widget.Toast.LENGTH_SHORT).show()
-                                } else {
-                                    android.widget.Toast.makeText(context, "⚠️ Sync failed. Check WebApp URL.", android.widget.Toast.LENGTH_LONG).show()
-                                }
-                                onBack()
-                            }
-                        }
-                    },
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = Color(0xFF1E293B),
-                        contentColor = MaterialTheme.colorScheme.secondary
-                    ),
-                    shape = RoundedCornerShape(8.dp),
-                    contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
-                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    Text("Done", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                    // Subtle Sheet Sync Status Badge (click to configure)
+                    Surface(
+                        onClick = { showAppsScriptSettingsDialog = true },
+                        color = if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF14532D).copy(alpha = 0.65f) else Color(0xFF78350F).copy(alpha = 0.75f),
+                        shape = RoundedCornerShape(20.dp),
+                        border = BorderStroke(1.dp, if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF86EFAC).copy(alpha = 0.8f) else Color(0xFFFCD34D).copy(alpha = 0.85f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Icon(
+                                imageVector = if (uiState.appsScriptUrl.isNotBlank()) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                                contentDescription = null,
+                                tint = if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF86EFAC) else Color(0xFFFCD34D),
+                                modifier = Modifier.size(15.dp)
+                            )
+                            Text(
+                                text = if (uiState.appsScriptUrl.isNotBlank()) strings.saved else strings.connect,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF86EFAC) else Color(0xFFFCD34D)
+                            )
+                        }
+                    }
+
+                    Button(
+                        onClick = {
+                            val configuredUrl = uiState.appsScriptUrl.trim()
+                            if (configuredUrl.isBlank()) {
+                                showAppsScriptSettingsDialog = true
+                                android.widget.Toast.makeText(
+                                    context,
+                                    strings.connect,
+                                    android.widget.Toast.LENGTH_SHORT
+                                ).show()
+                            } else {
+                                isSyncingNow = true
+                                scope.launch {
+                                    val (success, msg) = viewModel.syncMasjidToSheet(uiState.selectedMasjid)
+                                    isSyncingNow = false
+                                    android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                        if (success) {
+                                            android.widget.Toast.makeText(
+                                                context,
+                                                "✅ ${strings.timeUpdated}",
+                                                android.widget.Toast.LENGTH_SHORT
+                                            ).show()
+                                            onBack()
+                                        } else {
+                                            syncStatusErrorDialog = msg
+                                        }
+                                    }
+                                }
+                            }
+                        },
+                        enabled = !isSyncingNow,
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFF1E293B),
+                            contentColor = MaterialTheme.colorScheme.secondary
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                        border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.5f))
+                    ) {
+                        if (isSyncingNow) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.secondary
+                            )
+                        } else {
+                            Text("Done", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
                 }
             }
 
@@ -2773,6 +2832,9 @@ fun AdminPanelScreen(
                 },
                 onTest = { testUrl ->
                     viewModel.testAppsScriptConnection(testUrl)
+                },
+                onShowScriptCode = {
+                    showScriptCodeDialog = true
                 }
             )
         }
@@ -2783,6 +2845,56 @@ fun AdminPanelScreen(
                 onDismiss = { showScriptCodeDialog = false }
             )
         }
+
+        // Sync Error Dialog with Direct Action
+        syncStatusErrorDialog?.let { errorMsg ->
+            AlertDialog(
+                onDismissRequest = { syncStatusErrorDialog = null },
+                containerColor = Color(0xFF1E293B),
+                title = {
+                    Text(
+                        text = "Google Sheet Sync Error",
+                        color = Color(0xFFFCA5A5),
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 17.sp
+                    )
+                },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(
+                            text = if (errorMsg == "APPS_SCRIPT_NOT_SET") {
+                                "Google Sheet par live save hone ke liye WebApp URL configure hona zaroori hai."
+                            } else {
+                                "Google Sheet se connect nahi ho paya:\n\n$errorMsg"
+                            },
+                            color = Color.White.copy(alpha = 0.9f),
+                            fontSize = 13.sp
+                        )
+                        Text(
+                            text = "Aap 'Setup WebApp URL' par click karke apna URL check ya set kar sakte hain.",
+                            color = Color(0xFFF3DE8E),
+                            fontSize = 12.sp
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            syncStatusErrorDialog = null
+                            showAppsScriptSettingsDialog = true
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
+                    ) {
+                        Text("Setup WebApp URL", color = Color(0xFF0F172A), fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { syncStatusErrorDialog = null }) {
+                        Text("Dismiss", color = Color.White.copy(alpha = 0.7f))
+                    }
+                }
+            )
+        }
     }
 }
 
@@ -2791,12 +2903,14 @@ fun AppsScriptSettingsDialog(
     currentUrl: String,
     onDismiss: () -> Unit,
     onSave: (String) -> Unit,
-    onTest: suspend (String) -> Pair<Boolean, String>
+    onTest: suspend (String) -> Pair<Boolean, String>,
+    onShowScriptCode: () -> Unit
 ) {
     var urlText by remember { mutableStateOf(currentUrl) }
     var testResult by remember { mutableStateOf<Pair<Boolean, String>?>(null) }
     var isTesting by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
+    val clipboardManager = LocalClipboardManager.current
 
     Dialog(
         onDismissRequest = onDismiss,
@@ -2827,7 +2941,7 @@ fun AppsScriptSettingsDialog(
                 )
 
                 Text(
-                    text = "Paste your deployed Google Apps Script Web App URL below so time edits sync directly to the Google Sheet.",
+                    text = "Apne Google Sheet ka deployed Web App URL yahan paste karein taaki Namaz timings Google Sheet par save ho sakein.",
                     fontSize = 12.sp,
                     color = Color.White.copy(alpha = 0.75f),
                     textAlign = TextAlign.Center
@@ -2853,6 +2967,32 @@ fun AppsScriptSettingsDialog(
                     ),
                     modifier = Modifier.fillMaxWidth()
                 )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    TextButton(
+                        onClick = {
+                            val clipText = clipboardManager.getText()?.text
+                            if (!clipText.isNullOrBlank()) {
+                                urlText = clipText.trim()
+                                testResult = null
+                            }
+                        }
+                    ) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = null, tint = Color(0xFFF3DE8E), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Paste URL", color = Color(0xFFF3DE8E), fontSize = 12.sp)
+                    }
+
+                    TextButton(onClick = onShowScriptCode) {
+                        Icon(Icons.Default.Code, contentDescription = null, tint = Color(0xFF86EFAC), modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Text("Get Script Code", color = Color(0xFF86EFAC), fontSize = 12.sp)
+                    }
+                }
 
                 testResult?.let { (success, msg) ->
                     Text(

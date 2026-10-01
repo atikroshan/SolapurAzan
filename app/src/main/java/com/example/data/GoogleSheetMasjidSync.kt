@@ -103,7 +103,7 @@ Password,9595996629,,,,,
         return String.format(Locale.US, "%02d:%02d", h12, m)
     }
 
-    var APPS_SCRIPT_WEBAPP_URL = ""
+    var APPS_SCRIPT_WEBAPP_URL = "https://script.google.com/macros/s/AKfycbwNt9E_46DnmH_GJHZd16qBq0VpaN8GI9IKAQuwOaelfBKsWtXpiFlNTchF0rMgG4Lf/exec"
 
     val APPS_SCRIPT_SAMPLE_CODE = """
 function doGet(e) {
@@ -126,6 +126,60 @@ function handleRequest(e) {
       })).setMimeType(ContentService.MimeType.JSON);
     }
     
+    if (action === "updateAll") {
+      var id = (p.id || "").toString().trim();
+      if (!id) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "Missing id parameter"
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      var ss = SpreadsheetApp.getActiveSpreadsheet();
+      var sheet = ss.getActiveSheet();
+      var data = sheet.getDataRange().getValues();
+      var foundRow = -1;
+      for (var r = 0; r < data.length; r++) {
+        var firstCell = (data[r][0] || "").toString().trim();
+        var secondCell = (data[r][1] || "").toString().trim();
+        if (firstCell.toLowerCase() === "id" && secondCell === id) {
+          foundRow = r;
+          break;
+        }
+      }
+      if (foundRow === -1) {
+        return ContentService.createTextOutput(JSON.stringify({
+          status: "error",
+          message: "Masjid ID #" + id + " not found in sheet"
+        })).setMimeType(ContentService.MimeType.JSON);
+      }
+      var azanRow = -1;
+      var jammatRow = -1;
+      for (var r = foundRow; r < Math.min(data.length, foundRow + 8); r++) {
+        var tag = (data[r][0] || "").toString().trim().toLowerCase();
+        if (tag === "azan") azanRow = r;
+        if (tag === "jammat") jammatRow = r;
+      }
+      var prayers = [
+        { key: "fajr", col: 1 },
+        { key: "zohar", col: 2 },
+        { key: "asr", col: 3 },
+        { key: "maghrib", col: 4 },
+        { key: "isha", col: 5 },
+        { key: "jumah", col: 6 }
+      ];
+      for (var i = 0; i < prayers.length; i++) {
+        var item = prayers[i];
+        var a = p[item.key + "Azan"];
+        var j = p[item.key + "Jammat"];
+        if (azanRow !== -1 && a) sheet.getRange(azanRow + 1, item.col + 1).setValue(a);
+        if (jammatRow !== -1 && j) sheet.getRange(jammatRow + 1, item.col + 1).setValue(j);
+      }
+      return ContentService.createTextOutput(JSON.stringify({
+        status: "success",
+        message: "Updated all timings for Masjid #" + id
+      })).setMimeType(ContentService.MimeType.JSON);
+    }
+
     if (action === "update") {
       var id = (p.id || "").toString().trim();
       var prayer = (p.prayer || "").toString().trim().toLowerCase();
@@ -215,6 +269,82 @@ function handleRequest(e) {
   }
 }
     """.trimIndent()
+
+    suspend fun updateAllMasjidTimings(
+        masjid: MasjidItem,
+        webAppUrl: String? = null
+    ): Pair<Boolean, String> = withContext(Dispatchers.IO) {
+        val targetUrl = webAppUrl?.trim()?.ifBlank { null } ?: APPS_SCRIPT_WEBAPP_URL.trim().ifBlank { null }
+        if (targetUrl == null) {
+            return@withContext Pair(false, "Apps Script WebApp URL not configured.")
+        }
+        try {
+            val params = mapOf(
+                "action" to "updateAll",
+                "id" to masjid.id,
+                "fajrAzan" to formatForCsv(masjid.fajrAzanFixed ?: "05:40"),
+                "fajrJammat" to formatForCsv(masjid.fajrJammatFixed ?: "06:15"),
+                "zoharAzan" to formatForCsv(masjid.zoharAzanFixed ?: "13:15"),
+                "zoharJammat" to formatForCsv(masjid.zoharJammatFixed ?: "13:30"),
+                "asrAzan" to formatForCsv(masjid.asrAzanFixed ?: "17:17"),
+                "asrJammat" to formatForCsv(masjid.asrJammatFixed ?: "17:30"),
+                "maghribAzan" to formatForCsv(masjid.maghribAzanFixed ?: "18:10"),
+                "maghribJammat" to formatForCsv(masjid.maghribJammatFixed ?: "18:12"),
+                "ishaAzan" to formatForCsv(masjid.ishaAzanFixed ?: "19:50"),
+                "ishaJammat" to formatForCsv(masjid.ishaJammatFixed ?: "19:59"),
+                "jumahAzan" to formatForCsv(masjid.jumahAzanTime.ifBlank { "12:30" }),
+                "jumahJammat" to formatForCsv(masjid.jumahJammatTime.ifBlank { "13:30" })
+            )
+            val query = params.entries.joinToString("&") { (k, v) ->
+                "${java.net.URLEncoder.encode(k, "UTF-8")}=${java.net.URLEncoder.encode(v, "UTF-8")}"
+            }
+            var currentUrl = if (targetUrl.contains("?")) "$targetUrl&$query" else "$targetUrl?$query"
+
+            var redirectCount = 0
+            var finalCode = 0
+            var responseBody = ""
+
+            while (redirectCount < 6) {
+                val url = URL(currentUrl)
+                val conn = (url.openConnection() as HttpURLConnection).apply {
+                    requestMethod = "GET"
+                    connectTimeout = 15000
+                    readTimeout = 15000
+                    instanceFollowRedirects = false
+                    setRequestProperty("User-Agent", "AzanTimeApp/2.6")
+                }
+                finalCode = conn.responseCode
+                if (finalCode in listOf(301, 302, 303, 307, 308)) {
+                    val location = conn.getHeaderField("Location")
+                    if (!location.isNullOrBlank()) {
+                        currentUrl = location
+                        redirectCount++
+                        continue
+                    }
+                }
+
+                responseBody = try {
+                    val stream = if (finalCode in 200..299) conn.inputStream else conn.errorStream
+                    stream?.bufferedReader()?.use { it.readText() } ?: ""
+                } catch (e: Exception) {
+                    ""
+                }
+                break
+            }
+
+            if (finalCode in 200..299) {
+                if (responseBody.contains("\"error\"") && responseBody.contains("Unknown action")) {
+                    Pair(false, "OLD_SCRIPT_FORMAT")
+                } else {
+                    Pair(true, if (responseBody.isNotBlank()) responseBody.take(120) else "Google Sheet updated successfully")
+                }
+            } else {
+                Pair(false, "Google Sheet sync failed (HTTP $finalCode): ${responseBody.take(100)}")
+            }
+        } catch (e: Exception) {
+            Pair(false, "Sync network error: ${e.localizedMessage ?: e.message}")
+        }
+    }
 
     suspend fun updateRemoteGoogleSheet(
         masjidId: String,

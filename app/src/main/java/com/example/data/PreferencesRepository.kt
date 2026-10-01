@@ -148,7 +148,7 @@ class PreferencesRepository(private val context: Context) {
     }
 
     val appsScriptUrlFlow: Flow<String> = context.dataStore.data.map { prefs ->
-        prefs[KEY_APPS_SCRIPT_URL] ?: ""
+        prefs[KEY_APPS_SCRIPT_URL]?.ifBlank { null } ?: GoogleSheetMasjidSync.APPS_SCRIPT_WEBAPP_URL
     }
 
     suspend fun setAppsScriptUrl(url: String) {

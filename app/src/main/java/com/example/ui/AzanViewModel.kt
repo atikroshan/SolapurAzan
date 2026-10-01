@@ -386,9 +386,26 @@ class AzanViewModel(
         }
     }
 
-    suspend fun syncMasjidToSheet(masjid: MasjidItem): Boolean {
+    suspend fun syncMasjidToSheet(masjid: MasjidItem): Pair<Boolean, String> {
+        val currentUrl = prefs.appsScriptUrlFlow.firstOrNull()?.trim() ?: ""
+        if (currentUrl.isBlank()) {
+            return Pair(false, "APPS_SCRIPT_NOT_SET")
+        }
+
+        // Try fast updateAll in one request first
+        val (allSuccess, allMsg) = GoogleSheetMasjidSync.updateAllMasjidTimings(masjid, currentUrl)
+        if (allSuccess) {
+            _lastSyncStatusMessage.value = "Updated all timings successfully"
+            return Pair(true, allMsg)
+        }
+
+        if (allMsg != "OLD_SCRIPT_FORMAT") {
+            _lastSyncStatusMessage.value = allMsg
+            return Pair(false, allMsg)
+        }
+
+        // Fallback for older deployed scripts: update prayer by prayer
         val prayers = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha", "Jumah")
-        var allSuccess = true
         for (prayer in prayers) {
             val (azan, jammat) = when (prayer) {
                 "Fajr" -> masjid.fajrAzanFixed to masjid.fajrJammatFixed
@@ -399,17 +416,20 @@ class AzanViewModel(
                 "Jumah" -> masjid.jumahAzanTime to masjid.jumahJammatTime
                 else -> "" to ""
             }
-            val currentUrl = prefs.appsScriptUrlFlow.firstOrNull() ?: ""
-            val (success, _) = GoogleSheetMasjidSync.updateRemoteGoogleSheet(
+            val (success, msg) = GoogleSheetMasjidSync.updateRemoteGoogleSheet(
                 masjidId = masjid.id,
                 prayerName = prayer,
                 azanTime = azan ?: "",
                 jammatTime = jammat ?: "",
                 webAppUrl = currentUrl
             )
-            if (!success) allSuccess = false
+            if (!success) {
+                _lastSyncStatusMessage.value = msg
+                return Pair(false, msg)
+            }
         }
-        return allSuccess
+        _lastSyncStatusMessage.value = "Google Sheet updated successfully"
+        return Pair(true, "All prayer timings updated in Google Sheet")
     }
 
     fun saveOrUpdateMasjid(id: String, name: String, address: String, photoUrl: String) {
