@@ -2526,14 +2526,17 @@ fun AdminPanelScreen(
 
                 Button(
                     onClick = {
-                        // Just trigger the update, no local notification
-                        viewModel.updatePrayerAndJammatTime(
-                            prayerName = "", // Doesn't matter, trigger sync logic
-                            newAzanTime = "", 
-                            newJammatTime = "",
-                            onResult = { _, _ -> /* No action */ }
-                        )
-                        onBack()
+                        viewModel.viewModelScope.launch {
+                            val success = viewModel.syncMasjidToSheet(uiState.selectedMasjid)
+                            android.os.Handler(android.os.Looper.getMainLooper()).post {
+                                if (success) {
+                                    android.widget.Toast.makeText(context, "✅ Synced to Google Sheet!", android.widget.Toast.LENGTH_SHORT).show()
+                                } else {
+                                    android.widget.Toast.makeText(context, "⚠️ Sync failed. Check WebApp URL.", android.widget.Toast.LENGTH_LONG).show()
+                                }
+                                onBack()
+                            }
+                        }
                     },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF1E293B),
@@ -2724,18 +2727,7 @@ fun AdminPanelScreen(
                 prayer = prayer,
                 onDismiss = { editingPrayer = null },
                 onSave = { newAzan, newJammat ->
-                    viewModel.updatePrayerAndJammatTime(prayer.systemName, newAzan, newJammat) { success, syncMsg ->
-                        android.os.Handler(android.os.Looper.getMainLooper()).post {
-                            val toastMsg = if (success) {
-                                "✅ ${prayer.displayName} updated!\nGoogle Sheet Synced"
-                            } else {
-                                "⚠️ ${prayer.displayName} saved locally!\nSheet: $syncMsg"
-                            }
-                            android.widget.Toast.makeText(context, toastMsg, android.widget.Toast.LENGTH_LONG).show()
-                        }
-                    }
-                    val msg = "${prayer.displayName} updated: Azan $newAzan • Jammat $newJammat"
-                    android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                    viewModel.updatePrayerLocally(prayer.systemName, newAzan, newJammat)
                     editingPrayer = null
                 }
             )

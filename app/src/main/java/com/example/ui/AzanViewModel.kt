@@ -343,11 +343,10 @@ class AzanViewModel(
         return GoogleSheetMasjidSync.testAppsScriptConnection(url)
     }
 
-    fun updatePrayerAndJammatTime(
+    fun updatePrayerLocally(
         prayerName: String,
         newAzanTime: String,
-        newJammatTime: String,
-        onResult: ((Boolean, String) -> Unit)? = null
+        newJammatTime: String
     ) {
         val cal = _currentCalendar.value
         val m = cal.get(Calendar.MONTH) + 1
@@ -384,19 +383,33 @@ class AzanViewModel(
                 repository.updatePrayerTime(m, d, dbName, newAzanTime, applyToAll = true)
                 prefs.setCustomJammatTime(dbName, newJammatTime)
             }
+        }
+    }
 
-            // Sync update to remote Google Sheet
+    suspend fun syncMasjidToSheet(masjid: MasjidItem): Boolean {
+        val prayers = listOf("Fajr", "Dhuhr", "Asr", "Maghrib", "Isha", "Jumah")
+        var allSuccess = true
+        for (prayer in prayers) {
+            val (azan, jammat) = when (prayer) {
+                "Fajr" -> masjid.fajrAzanFixed to masjid.fajrJammatFixed
+                "Dhuhr" -> masjid.zoharAzanFixed to masjid.zoharJammatFixed
+                "Asr" -> masjid.asrAzanFixed to masjid.asrJammatFixed
+                "Maghrib" -> masjid.maghribAzanFixed to masjid.maghribJammatFixed
+                "Isha" -> masjid.ishaAzanFixed to masjid.ishaJammatFixed
+                "Jumah" -> masjid.jumahAzanTime to masjid.jumahJammatTime
+                else -> "" to ""
+            }
             val currentUrl = prefs.appsScriptUrlFlow.firstOrNull() ?: ""
-            val (success, msg) = GoogleSheetMasjidSync.updateRemoteGoogleSheet(
-                masjidId = updatedMasjid.id,
-                prayerName = prayerName,
-                azanTime = newAzanTime,
-                jammatTime = newJammatTime,
+            val (success, _) = GoogleSheetMasjidSync.updateRemoteGoogleSheet(
+                masjidId = masjid.id,
+                prayerName = prayer,
+                azanTime = azan ?: "",
+                jammatTime = jammat ?: "",
                 webAppUrl = currentUrl
             )
-            _lastSyncStatusMessage.value = msg
-            onResult?.invoke(success, msg)
+            if (!success) allSuccess = false
         }
+        return allSuccess
     }
 
     fun saveOrUpdateMasjid(id: String, name: String, address: String, photoUrl: String) {
