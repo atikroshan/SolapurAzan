@@ -537,10 +537,10 @@ fun LanguageCirclesRow(
         horizontalArrangement = Arrangement.spacedBy(8.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        // English: morphs between circle (34x34) and rectangle (56x34, corner 8dp) with animation
+        // English: morphs between circle (34x34) and rectangle (70x34, corner 8dp) with animation
         LanguageAnimatedButton(
             shortLabel = "E",
-            activeLabel = "ENG",
+            activeLabel = "ENGLISH",
             langCode = "en",
             currentLang = currentLang,
             isOtherLarger = false,
@@ -583,7 +583,7 @@ fun LanguageAnimatedButton(
 
     // Morph target dimensions
     val targetWidth = when {
-        isSelected -> 56.dp
+        isSelected -> 70.dp
         isOtherLarger -> 40.dp
         else -> 34.dp
     }
@@ -594,7 +594,7 @@ fun LanguageAnimatedButton(
     }
     // Corner radius animation: rectangle = 8dp, circle = 20dp (for 40dp) or 17dp (for 34dp)
     val targetCorner = when {
-        isSelected -> 8.dp
+        isSelected -> 17.dp // Smoothly morphs from circle shape
         isOtherLarger -> 20.dp
         else -> 17.dp
     }
@@ -2507,7 +2507,16 @@ fun AdminPanelScreen(
                 }
 
                 Button(
-                    onClick = onBack,
+                    onClick = {
+                        // Just trigger the update, no local notification
+                        viewModel.updatePrayerAndJammatTime(
+                            prayerName = "", // Doesn't matter, trigger sync logic
+                            newAzanTime = "", 
+                            newJammatTime = "",
+                            onResult = { _, _ -> /* No action */ }
+                        )
+                        onBack()
+                    },
                     colors = ButtonDefaults.buttonColors(
                         containerColor = Color(0xFF1E293B),
                         contentColor = MaterialTheme.colorScheme.secondary
@@ -2523,7 +2532,10 @@ fun AdminPanelScreen(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Language Switcher Row (Same as Home Page)
-            LanguageToggleRow(uiState.language) { viewModel.setLanguage(it) }
+            LanguageCirclesRow(
+                currentLang = uiState.language,
+                onLangSelect = { viewModel.setLanguage(it) }
+            )
 
             Spacer(modifier = Modifier.height(12.dp))
 
@@ -2535,7 +2547,7 @@ fun AdminPanelScreen(
                     .verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // Active Masjid Info Card + Cloud Controls
+                // Active Masjid Info Card
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = Color(0xFF111827).copy(alpha = 0.95f)),
@@ -2578,86 +2590,6 @@ fun AdminPanelScreen(
                                     text = "${curMasjid.area} • ID: #${curMasjid.id}",
                                     fontSize = 11.5.sp,
                                     color = Color.White.copy(alpha = 0.8f)
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Google Sheet Cloud Sync Status Card
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = CardDefaults.cardColors(containerColor = Color(0xFF131C2E)),
-                    shape = RoundedCornerShape(14.dp),
-                    border = BorderStroke(1.dp, if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF86EFAC).copy(alpha = 0.6f) else Color(0xFFF3DE8E).copy(alpha = 0.5f))
-                ) {
-                    Column(
-                        modifier = Modifier.fillMaxWidth().padding(14.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween
-                        ) {
-                            Row(
-                                modifier = Modifier.weight(1f),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(8.dp)
-                            ) {
-                                Icon(
-                                    imageVector = if (uiState.appsScriptUrl.isNotBlank()) Icons.Default.CloudDone else Icons.Default.CloudSync,
-                                    contentDescription = null,
-                                    tint = if (uiState.appsScriptUrl.isNotBlank()) Color(0xFF86EFAC) else Color(0xFFF3DE8E),
-                                    modifier = Modifier.size(22.dp)
-                                )
-                                Column {
-                                    Text(
-                                        text = if (uiState.appsScriptUrl.isNotBlank()) "Google Sheet Auto-Sync Active" else "Google Sheet Sync Setup",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 13.5.sp,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = if (uiState.appsScriptUrl.isNotBlank()) "Timing edits save automatically to remote Google Sheet" else "Configure WebApp URL so timing changes save to Google Sheet",
-                                        fontSize = 10.5.sp,
-                                        color = Color.White.copy(alpha = 0.7f)
-                                    )
-                                }
-                            }
-                        }
-
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            OutlinedButton(
-                                onClick = { showAppsScriptSettingsDialog = true },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                border = BorderStroke(1.dp, Color(0xFFF3DE8E).copy(alpha = 0.7f))
-                            ) {
-                                Text(
-                                    text = if (uiState.appsScriptUrl.isNotBlank()) "Edit WebApp URL" else "Set WebApp URL",
-                                    fontSize = 11.5.sp,
-                                    color = Color(0xFFF3DE8E),
-                                    fontWeight = FontWeight.Bold
-                                )
-                            }
-
-                            OutlinedButton(
-                                onClick = { showScriptCodeDialog = true },
-                                modifier = Modifier.weight(1f),
-                                shape = RoundedCornerShape(8.dp),
-                                contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp),
-                                border = BorderStroke(1.dp, Color(0xFF86EFAC).copy(alpha = 0.7f))
-                            ) {
-                                Text(
-                                    text = "Get Script Code",
-                                    fontSize = 11.5.sp,
-                                    color = Color(0xFF86EFAC),
-                                    fontWeight = FontWeight.Bold
                                 )
                             }
                         }
