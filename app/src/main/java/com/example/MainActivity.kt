@@ -1316,12 +1316,19 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
 
         slots.forEachIndexed { index, triple ->
             val isNext = isToday && (index == currentNextIndex)
-            val isExpanded = (index == expandedIndex)
             val jammatTimeStr = if (triple.first != "Tahajjud") {
                 getEffectiveJammatTime(triple.first, triple.third, uiState.customJammatTimes, isFridayToday, uiState.selectedMasjid)
             } else {
                 ""
             }
+            
+            // Ongoing if current time is between Azan and Jamaat
+            val currentMinutes = Calendar.getInstance(TimeZone.getTimeZone("Asia/Kolkata")).let { it.get(Calendar.HOUR_OF_DAY) * 60 + it.get(Calendar.MINUTE) }
+            val azanMin = triple.third.split(":").let { if (it.size >= 2) (it[0].toIntOrNull() ?: 0) * 60 + (it[1].toIntOrNull() ?: 0) else 0 }
+            val jammatMin = jammatTimeStr.split(":").let { if (it.size >= 2) (it[0].toIntOrNull() ?: 0) * 60 + (it[1].toIntOrNull() ?: 0) else 0 }
+            val isOngoing = isToday && (currentMinutes in azanMin..jammatMin)
+
+            val isExpanded = (index == expandedIndex)
             
             AzanSlot(
                 systemName = triple.first,
@@ -1330,6 +1337,7 @@ fun AzanList(viewModel: AzanViewModel, uiState: com.example.ui.UIState, modifier
                 jammatTime = jammatTimeStr,
                 enabled = toggles[index],
                 isNext = isNext,
+                isOngoing = isOngoing,
                 icon = icons[index],
                 prayed = prayedList[index],
                 expanded = isExpanded,
@@ -1416,6 +1424,7 @@ fun AzanSlot(
     jammatTime: String = "",
     enabled: Boolean,
     isNext: Boolean,
+    isOngoing: Boolean = false,
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     prayed: Boolean,
     expanded: Boolean,
@@ -1425,6 +1434,13 @@ fun AzanSlot(
     onToggle: (Boolean) -> Unit,
     onPrayedToggle: () -> Unit
 ) {
+    // ...
+    val isHighlighted = isNext || isOngoing
+    // ...
+    // Text("NEXT") logic inside AzanSlot changed to use strings.ongoing if isOngoing is true
+    // And AzanJammatDisplay(..., isNext = isNext, isOngoing = isOngoing)
+    // ...
+
     val infiniteTransition = rememberInfiniteTransition(label = "trimTransition")
     
     val flareProgress by infiniteTransition.animateFloat(
@@ -1560,18 +1576,18 @@ fun AzanSlot(
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
                             text = displayName,
-                            fontSize = if (isNext) {
+                            fontSize = if (isHighlighted) {
                                 if (systemName == "Maghrib") 18.sp else 22.sp
                             } else 16.sp,
-                            fontWeight = if (isNext) FontWeight.Black else FontWeight.Bold,
-                            color = if (isNext) MaterialTheme.colorScheme.secondary else TextColor,
+                            fontWeight = if (isHighlighted) FontWeight.Black else FontWeight.Bold,
+                            color = if (isHighlighted) MaterialTheme.colorScheme.secondary else TextColor,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
-                        if (isNext) {
+                        if (isHighlighted) {
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
-                                text = strings.next,
+                                text = if (isOngoing) strings.ongoing else strings.next,
                                 fontSize = 8.sp,
                                 fontWeight = FontWeight.Black,
                                 color = Color.Black,
@@ -1593,14 +1609,15 @@ fun AzanSlot(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(4.dp)
                 ) {
-                    if (!isNext) {
+                    if (!isHighlighted) {
                         if (systemName == "Tahajjud") {
                             PrayerTimeDisplay(time24 = time, isNext = false)
                         } else {
                             AzanJammatDisplay(
                                 azanTime24 = time,
                                 jammatTime24 = jammatTime,
-                                isNext = false
+                                isNext = false,
+                                isOngoing = false
                             )
                         }
                     } else if (systemName == "Tahajjud") {
@@ -2013,14 +2030,15 @@ fun getEffectiveJammatTime(
 fun AzanJammatDisplay(
     azanTime24: String,
     jammatTime24: String,
-    isNext: Boolean
+    isNext: Boolean,
+    isOngoing: Boolean = false
 ) {
     val strings = LocalAppStrings.current
     val azanFormatted = formatTo12Hour(azanTime24)
     val jammatFormatted = formatTo12Hour(jammatTime24)
 
-    val labelColor = if (isNext) Color(0xFFF3DE8E) else TextMuted
-    val timeBrush = if (isNext) {
+    val labelColor = if (isNext || isOngoing) Color(0xFFF3DE8E) else TextMuted
+    val timeBrush = if (isNext || isOngoing) {
         Brush.verticalGradient(listOf(Color(0xFFF3DE8E), Color(0xFFE5A93C)))
     } else {
         Brush.verticalGradient(listOf(Color.White, Color(0xFFD1D5DB)))

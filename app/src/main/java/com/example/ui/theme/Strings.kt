@@ -172,6 +172,7 @@ data class AppStrings(
 
     // Miscellaneous
     val upcoming: String = "Upcoming",
+    val ongoing: String = "ONGOING",
     val none: String = "None"
 ) {
     fun getMonthFullName(month: Int): String = when (month) {
@@ -407,6 +408,7 @@ val HindiStrings = AppStrings(
 
     // Miscellaneous
     upcoming = "आगामी",
+    ongoing = "जारी",
     none = "कोई नहीं"
 )
 
@@ -580,6 +582,7 @@ val UrduStrings = AppStrings(
 
     // Miscellaneous
     upcoming = "آنے والا",
+    ongoing = "جاری",
     none = "کوئی نہیں"
 )
 
