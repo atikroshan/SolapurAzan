@@ -2435,6 +2435,7 @@ fun AdminPanelScreen(
     onBack: () -> Unit
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val strings = LocalAppStrings.current
     val primaryColor = MaterialTheme.colorScheme.primary
     val curMasjid = uiState.selectedMasjid
@@ -2526,7 +2527,7 @@ fun AdminPanelScreen(
 
                 Button(
                     onClick = {
-                        viewModel.viewModelScope.launch {
+                        scope.launch {
                             val success = viewModel.syncMasjidToSheet(uiState.selectedMasjid)
                             android.os.Handler(android.os.Looper.getMainLooper()).post {
                                 if (success) {
